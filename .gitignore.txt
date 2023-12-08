@@ -1,0 +1,5 @@
+*.pkl
+*.zip
+*.jpg
+data/
+.ipynb_checkpoints
