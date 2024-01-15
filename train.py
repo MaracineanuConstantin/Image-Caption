@@ -8,19 +8,26 @@ import pickle
 from data_loader import get_loader 
 from build_vocab import Vocabulary
 from model import EncoderCNN, DecoderRNN
-# from anothermodel import EncoderCNN, DecoderRNN
 from torch.nn.utils.rnn import pack_padded_sequence
 from torchvision import transforms
+from utils import AverageMeter
 import time
 
-best_loss = 100
+## TODO: check 1 image dataflow
+## check real img caption vs output caption
+## check sample.py
+## TODO: Implement sacred
+## TODO: Code refactor into functions
+## TODO: best_loss = first loss
+## TODO: BLEU4 eval metric
+## TODO: de facut media la loss la finaul unei epoci si dupa bucla de antrenat verificat best_loss
 
 # Device configuration
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 def main(args):
-    global best_loss
-
+    global best_loss, device
+    best_loss = None
     # Create model directory
     if not os.path.exists(args.model_path):
         os.makedirs(args.model_path)
@@ -37,11 +44,11 @@ def main(args):
     with open(args.vocab_path, 'rb') as f:
         vocab = pickle.load(f)
     
+
     # Build data loader
     data_loader = get_loader(args.train_dir, args.caption_path, vocab, 
                              transform, args.batch_size,
                              shuffle=True, num_workers=args.num_workers) 
-
     # val_loader = val_loader(args.val_dir, args.val_caption_path, vocab, args.batch_size,
     #                         num_workers=args.num_workers, transform=transform)
 
@@ -53,7 +60,7 @@ def main(args):
     criterion = nn.CrossEntropyLoss()
     params = list(decoder.parameters()) + list(encoder.linear.parameters()) + list(encoder.bn.parameters())
     optimizer = torch.optim.Adam(params, lr=args.learning_rate)
-    
+
     # Open the training log file
     f = open(args.log_file, 'w')
 
@@ -63,7 +70,24 @@ def main(args):
     total_step = len(data_loader)
     for epoch in range(args.num_epochs):
         start = time.time()
-        for i, (images, captions, lengths) in enumerate(data_loader):
+        train_loss = train(args,data_loader, encoder, decoder, criterion, optimizer, epoch, best_loss, total_step)
+        if best_loss is None:
+            best_loss = train_loss
+        # Save the model checkpoints
+        if best_loss < train_loss:
+            best_loss = train_loss
+            torch.save(decoder.state_dict(), os.path.join(
+                args.model_path, 'decoder-{}-{}.ckpt'.format(epoch+1, i+1)))
+            torch.save(encoder.state_dict(), os.path.join(
+                args.model_path, 'encoder-{}-{}.ckpt'.format(epoch+1, i+1)))
+        end = time.time()
+        end_time = end - start
+        f.write(f"Time on epoch {epoch} is: {end_time} + '\n")
+        f.flush()
+        
+def train(args,data_loader, encoder, decoder, criterion, optimizer, epoch, best_loss, total_step):
+    losses = AverageMeter()
+    for i, (images, captions, lengths) in enumerate(data_loader):
             
             # Set mini-batch dataset
             images = images.to(device)
@@ -79,31 +103,17 @@ def main(args):
             loss.backward()
             optimizer.step()
 
+            # average batch loss
+            losses.update(loss.item(), images.size(0))
+
             # Get training statistics.
-            # stats = 'Epoch [%d/%d], Step [%d/%d], Loss: %.4f, Perplexity: %5.4f' % (epoch, num_epochs, i_step, total_step, loss.item(), np.exp(loss.item()))
-
-            end = time.time()
-
             stats = 'Epoch [{}/{}], Step [{}/{}], Loss: {:.4f}, Perplexity: {:5.4f}'.format(epoch, args.num_epochs, i, total_step, loss.item(), np.exp(loss.item()))
 
             # Print training statistics .
             if (i+1) % args.log_step == 0:
                 print(stats)
-                f.write(stats + '\n')
-                f.flush()
             
-            # Save the model checkpoints
-            if loss.item() < best_loss:
-                best_loss = loss.item()
-                torch.save(decoder.state_dict(), os.path.join(
-                    args.model_path, 'decoder-{}-{}.ckpt'.format(epoch+1, i+1)))
-                torch.save(encoder.state_dict(), os.path.join(
-                    args.model_path, 'encoder-{}-{}.ckpt'.format(epoch+1, i+1)))
-            
-        end = time.time()
-        end_time = end - start
-        f.write(f"Time on {epoch} epoch is: {end_time} + '\n")
-        f.flush()
+    return losses.avg
         
 
 if __name__ == '__main__':
@@ -115,7 +125,7 @@ if __name__ == '__main__':
     parser.add_argument('--val_dir', type=str, default='data/resizedval2014', help='directory for resized val images')
     parser.add_argument('--caption_path', type=str, default='data/annotations/captions_train2014.json', help='path for train annotation json file')
     parser.add_argument('--val_caption_path', type=str, default='data/annotations/captions_val2014.json', help='path for val annotation json file')
-    parser.add_argument('--log_step', type=int , default=100, help='step size for prining log info')
+    parser.add_argument('--log_step', type=int , default=10, help='step size for prining log info')
     parser.add_argument('--save_step', type=int , default=1000, help='step size for saving trained models')
     
     # log file
