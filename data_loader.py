@@ -24,6 +24,8 @@ class CocoDataset(data.Dataset):
         self.root = root
         self.coco = COCO(json)
         self.ids = list(self.coco.anns.keys())
+        # If needed to shorten the amount of images - change the number from [] in the line below and it will take the first x images
+        # self.ids = list(self.coco.anns.keys())[:130]
         self.vocab = vocab
         self.transform = transform
 
@@ -51,7 +53,6 @@ class CocoDataset(data.Dataset):
 
     def __len__(self):
         return len(self.ids)
-
 
 def collate_fn(data):
     """Creates mini-batch tensors from the list of tuples (image, caption).
@@ -103,3 +104,17 @@ def get_loader(root, json, vocab, transform, batch_size, shuffle, num_workers):
                                               num_workers=num_workers,
                                               collate_fn=collate_fn)
     return data_loader
+
+def validation_loader(root, json, vocab, transform, batch_size, num_workers):
+    # COCO caption dataset
+    coco_val = CocoDataset(root=root,
+                       json=json,
+                       vocab=vocab,
+                       transform=transform)
+    
+    val_loader = torch.utils.data.DataLoader(dataset=coco_val,
+                                             batch_size=batch_size,
+                                             shuffle=False,
+                                             num_workers=num_workers,
+                                             collate_fn=collate_fn)
+    return val_loader

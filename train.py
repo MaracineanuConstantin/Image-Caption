@@ -74,11 +74,13 @@ def main(args):
         if validation_loss < best_loss:
             best_loss = validation_loss
             torch.save(decoder.state_dict(), os.path.join(
-                args.model_path, 'decoder-{}-{}.ckpt'.format(epoch+1, i+1)))
+                args.model_path, 'decoder-{}.ckpt'.format(epoch+1)))
             torch.save(encoder.state_dict(), os.path.join(
-                args.model_path, 'encoder-{}-{}.ckpt'.format(epoch+1, i+1)))
+                args.model_path, 'encoder-{}.ckpt'.format(epoch+1)))
 
 def train(args,data_loader, encoder, decoder, criterion, optimizer, epoch, best_loss, total_step):
+    encoder.train()
+    decoder.train()
     losses = AverageMeter()
     batch_time = AverageMeter()
     data_time = AverageMeter()
@@ -107,11 +109,12 @@ def train(args,data_loader, encoder, decoder, criterion, optimizer, epoch, best_
             start = time.time()
 
             # Get training statistics.
-            stats = f'Epoch [{epoch}/{args.num_epochs}], Step [{i}/{total_step}], Batch time {batch_time.avg:.3f}, Data time {data_time.avg:.3f}, Loss {loss.item():.3f}, Perplexity {np.exp(loss.item()):.3f}'
+            stats = f'Training epoch [{epoch}/{args.num_epochs}], Step [{i}/{total_step}], Batch time {batch_time.avg:.3f}, Data time {data_time.avg:.3f}, Loss {loss.item():.3f}, Perplexity {np.exp(loss.item()):.3f}'
             # Print training statistics .
             if (i+1) % args.log_step == 0:
                 print(stats)
-            
+                
+    print(f'Training loss: {losses.avg}')
     return losses.avg
         
 def validate(args,val_loader, encoder, decoder, criterion, epoch, total_step):
@@ -134,9 +137,11 @@ def validate(args,val_loader, encoder, decoder, criterion, epoch, total_step):
             loss = criterion(outputs, targets)
 
             losses.update(loss.item(), images.size(0))
-            stats = f'Epoch [{epoch}/{args.num_epochs}], Step [{i}/{total_step}], Batch time {batch_time.avg:.3f}, Loss {loss.item():.3f}'
 
-    
+            stats = f'Validation epoch [{epoch}/{args.num_epochs}], Step [{i}/{total_step}], Batch time {batch_time.avg:.3f}, Loss {loss.item():.3f}'
+            # Print training statistics .
+            if (i+1) % args.log_step == 0:
+                print(stats)
     print(f'Validation loss: {losses.avg:.3f}')
     return losses.avg
 
@@ -150,18 +155,15 @@ if __name__ == '__main__':
     parser.add_argument('--val_dir', type=str, default='data/resizedval2014', help='directory for resized val images')
     parser.add_argument('--caption_path', type=str, default='data/annotations/captions_train2014.json', help='path for train annotation json file')
     parser.add_argument('--val_caption_path', type=str, default='data/annotations/captions_val2014.json', help='path for val annotation json file')
-    parser.add_argument('--log_step', type=int , default=10, help='step size for prining log info')
+    parser.add_argument('--log_step', type=int , default=1, help='step size for prining log info')
     parser.add_argument('--save_step', type=int , default=1000, help='step size for saving trained models')
     
-    # log file
-    parser.add_argument('--log_file', type=str, default='training_log.txt', help='name of the log file + .txt')
-
     # Model parameters
     parser.add_argument('--embed_size', type=int , default=256, help='dimension of word embedding vectors')
     parser.add_argument('--hidden_size', type=int , default=512, help='dimension of lstm hidden states')
     parser.add_argument('--num_layers', type=int , default=1, help='number of layers in lstm')
     
-    parser.add_argument('--num_epochs', type=int, default=30)
+    parser.add_argument('--num_epochs', type=int, default=10)
     parser.add_argument('--batch_size', type=int, default=128)
     parser.add_argument('--num_workers', type=int, default=2)
     parser.add_argument('--learning_rate', type=float, default=0.001)
