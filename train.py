@@ -67,13 +67,12 @@ def main(args):
     for epoch in range(args.num_epochs):
         start = time.time()
         train_loss = train(args,data_loader, encoder, decoder, criterion, optimizer, epoch, best_loss, total_step)
-        # Validate the model on the validation set
         validation_loss = validate(args, val_loader, encoder, decoder, criterion)
         if best_loss is None:
-            best_loss = train_loss
+            best_loss = validation_loss
         # Save the model checkpoints
-        if best_loss < train_loss:
-            best_loss = train_loss
+        if validation_loss < best_loss:
+            best_loss = validation_loss
             torch.save(decoder.state_dict(), os.path.join(
                 args.model_path, 'decoder-{}-{}.ckpt'.format(epoch+1, i+1)))
             torch.save(encoder.state_dict(), os.path.join(
@@ -135,7 +134,7 @@ def validate(args,val_loader, encoder, decoder, criterion, epoch, total_step):
             loss = criterion(outputs, targets)
 
             losses.update(loss.item(), images.size(0))
-            # stats = f'Epoch [{epoch}/{args.num_epochs}], Step [{i}/{total_step}], Batch time {batch_time.avg:.3f}, Loss {loss.item():.3f}'
+            stats = f'Epoch [{epoch}/{args.num_epochs}], Step [{i}/{total_step}], Batch time {batch_time.avg:.3f}, Loss {loss.item():.3f}'
 
     
     print(f'Validation loss: {losses.avg:.3f}')
