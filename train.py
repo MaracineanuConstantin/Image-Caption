@@ -12,6 +12,9 @@ from torch.nn.utils.rnn import pack_padded_sequence
 from torchvision import transforms
 from utils import AverageMeter
 import time
+from sacred import Experiment
+from sacred.observers import FileStorageObserver
+
 
 ## TODO: check 1 image dataflow
 ## check real img caption vs output caption
@@ -22,63 +25,36 @@ import time
 ## TODO: BLEU4 eval metric
 ## TODO: de facut media la loss la finalul unei epoci si dupa bucla de antrenat verificat best_loss
 
-# Device configuration
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-def main(args):
-    global best_loss
+# Create a sacred experiment
+ex = Experiment("train_experiment")
+observers_directory = 'experiments'
+ex.observers.append(FileStorageObserver(observers_directory))
+
+
+@ex.config
+def cfg():
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    model_path = 'models/'
+    crop_size = 224
+    vocab_path = 'data/vocab.pkl'
+    train_dir = 'data/resized2014'
+    val_dir = 'data/resizedval2014'
+    caption_path = 'data/annotations/captions_train2014.json'
+    val_caption_path = 'data/annotations/captions_val2014.json'
+    log_step = 1
+    embed_size = 256
+    hidden_size = 512
+    num_layers = 1
+    num_epochs = 10
+    batch_size = 128
+    num_workers = 2
+    learning_rate = 1e-3
     best_loss = None
-    # Create model directory
-    if not os.path.exists(args.model_path):
-        os.makedirs(args.model_path)
-    
-    # Image preprocessing, normalization for the pretrained resnet
-    transform = transforms.Compose([ 
-        transforms.RandomCrop(args.crop_size),
-        transforms.RandomHorizontalFlip(), 
-        transforms.ToTensor(), 
-        transforms.Normalize((0.485, 0.456, 0.406), 
-                             (0.229, 0.224, 0.225))])
-    
-    # Load vocabulary wrapper
-    with open(args.vocab_path, 'rb') as f:
-        vocab = pickle.load(f)
-    
+    epochs_since_last_improvement = 0
 
-    # Build data loader
-    data_loader = get_loader(args.train_dir, args.caption_path, vocab, 
-                             transform, args.batch_size,
-                             shuffle=True, num_workers=args.num_workers)
-
-    val_loader = validation_loader(args.val_dir, args.val_caption_path, vocab, transform, args.batch_size,
-                            num_workers=args.num_workers)
-
-    # Build the models
-    encoder = EncoderCNN(args.embed_size).to(device)
-    decoder = DecoderRNN(args.embed_size, args.hidden_size, len(vocab), args.num_layers).to(device)
-    
-    # Loss and optimizer
-    criterion = nn.CrossEntropyLoss()
-    params = list(decoder.parameters()) + list(encoder.linear.parameters()) + list(encoder.bn.parameters())
-    optimizer = torch.optim.Adam(params, lr=args.learning_rate)
-
-    # Train the models
-    total_step = len(data_loader)
-    for epoch in range(args.num_epochs):
-        start = time.time()
-        train_loss = train(args,data_loader, encoder, decoder, criterion, optimizer, epoch, best_loss, total_step)
-        validation_loss = validate(args, val_loader, encoder, decoder, criterion, epoch, total_step)
-        if best_loss is None:
-            best_loss = validation_loss
-        # Save the model checkpoints
-        if validation_loss < best_loss:
-            best_loss = validation_loss
-            torch.save(decoder.state_dict(), os.path.join(
-                args.model_path, 'decoder-{}.ckpt'.format(epoch+1)))
-            torch.save(encoder.state_dict(), os.path.join(
-                args.model_path, 'encoder-{}.ckpt'.format(epoch+1)))
-
-def train(args,data_loader, encoder, decoder, criterion, optimizer, epoch, best_loss, total_step):
+@ex.capture
+def train(device, data_loader, encoder, decoder, criterion, optimizer, epoch, best_loss, total_step, num_epochs, log_step):
     encoder.train()
     decoder.train()
     losses = AverageMeter()
@@ -109,15 +85,18 @@ def train(args,data_loader, encoder, decoder, criterion, optimizer, epoch, best_
             start = time.time()
 
             # Get training statistics.
-            stats = f'Training epoch [{epoch}/{args.num_epochs}], Step [{i}/{total_step}], Batch time {batch_time.avg:.3f}, Data time {data_time.avg:.3f}, Loss {loss.item():.3f}, Perplexity {np.exp(loss.item()):.3f}'
+            stats = f'Training epoch [{epoch}/{num_epochs}], Step [{i}/{total_step}], Batch time {batch_time.avg:.3f}, Data time {data_time.avg:.3f}, Loss {loss.item():.3f}, Perplexity {np.exp(loss.item()):.3f}'
             # Print training statistics .
-            if (i+1) % args.log_step == 0:
+            if (i+1) % log_step == 0:
                 print(stats)
-                
+
+    ex.log_scalar('Train/Loss', losses.avg, epoch)
     print(f'Training loss: {losses.avg}')
     return losses.avg
-        
-def validate(args,val_loader, encoder, decoder, criterion, epoch, total_step):
+
+
+@ex.capture
+def validate(device, val_loader, encoder, decoder, criterion, epoch, total_step, num_epochs, log_step):
     encoder.eval()
     decoder.eval()
 
@@ -138,35 +117,76 @@ def validate(args,val_loader, encoder, decoder, criterion, epoch, total_step):
 
             losses.update(loss.item(), images.size(0))
 
-            stats = f'Validation epoch [{epoch}/{args.num_epochs}], Step [{i}/{total_step}], Batch time {batch_time.avg:.3f}, Loss {loss.item():.3f}'
+            stats = f'Validation epoch [{epoch}/{num_epochs}], Step [{i}/{total_step}], Batch time {batch_time.avg:.3f}, Loss {loss.item():.3f}'
             # Print training statistics .
-            if (i+1) % args.log_step == 0:
+            if (i+1) % log_step == 0:
                 print(stats)
+
+    ex.log_scalar('Validation/Loss', losses.avg, epoch)
     print(f'Validation loss: {losses.avg:.3f}')
     return losses.avg
 
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--model_path', type=str, default='models/' , help='path for saving trained models')
-    parser.add_argument('--crop_size', type=int, default=224 , help='size for randomly cropping images')
-    parser.add_argument('--vocab_path', type=str, default='data/vocab.pkl', help='path for vocabulary wrapper')
-    parser.add_argument('--train_dir', type=str, default='data/resized2014', help='directory for resized train images')
-    parser.add_argument('--val_dir', type=str, default='data/resizedval2014', help='directory for resized val images')
-    parser.add_argument('--caption_path', type=str, default='data/annotations/captions_train2014.json', help='path for train annotation json file')
-    parser.add_argument('--val_caption_path', type=str, default='data/annotations/captions_val2014.json', help='path for val annotation json file')
-    parser.add_argument('--log_step', type=int , default=1, help='step size for prining log info')
-    parser.add_argument('--save_step', type=int , default=1000, help='step size for saving trained models')
+@ex.automain
+def main(device, model_path, crop_size, vocab_path, train_dir, val_dir, caption_path, val_caption_path, 
+        log_step, embed_size, hidden_size, num_layers, num_epochs, batch_size, num_workers, learning_rate, _run, best_loss, 
+        epochs_since_last_improvement):
+
     
-    # Model parameters
-    parser.add_argument('--embed_size', type=int , default=256, help='dimension of word embedding vectors')
-    parser.add_argument('--hidden_size', type=int , default=512, help='dimension of lstm hidden states')
-    parser.add_argument('--num_layers', type=int , default=1, help='number of layers in lstm')
+    # Create directory for current time
+    current_time = time.strftime("%Y-%m-%d_%H_%M_%S", time.localtime())
+    log_dir = os.path.join(observers_directory, _run._id)
+    os.makedirs(log_dir, exist_ok=True)
+
+    # Image preprocessing, normalization for the pretrained resnet
+    transform = transforms.Compose([ 
+        transforms.RandomCrop(crop_size),
+        transforms.RandomHorizontalFlip(), 
+        transforms.ToTensor(), 
+        transforms.Normalize((0.485, 0.456, 0.406), 
+                             (0.229, 0.224, 0.225))])
     
-    parser.add_argument('--num_epochs', type=int, default=10)
-    parser.add_argument('--batch_size', type=int, default=128)
-    parser.add_argument('--num_workers', type=int, default=2)
-    parser.add_argument('--learning_rate', type=float, default=0.001)
-    args = parser.parse_args()
-    print(args)
-    main(args)
+    # Load vocabulary wrapper
+    with open(vocab_path, 'rb') as f:
+        vocab = pickle.load(f)
+    
+
+    # Build data loader
+    data_loader = get_loader(train_dir, caption_path, vocab, 
+                             transform, batch_size,
+                             shuffle=True, num_workers=num_workers)
+
+    val_loader = validation_loader(val_dir, val_caption_path, vocab, transform, batch_size,
+                            num_workers=num_workers)
+
+    # Build the models
+    encoder = EncoderCNN(embed_size).to(device)
+    decoder = DecoderRNN(embed_size, hidden_size, len(vocab), num_layers).to(device)
+    
+    # Loss and optimizer
+    criterion = nn.CrossEntropyLoss()
+    params = list(decoder.parameters()) + list(encoder.linear.parameters()) + list(encoder.bn.parameters())
+    optimizer = torch.optim.Adam(params, lr=learning_rate)
+
+    # Train the models
+    total_step = len(data_loader)
+    for epoch in range(num_epochs):
+        start = time.time()
+        train_loss = train(device, data_loader, encoder, decoder, criterion, optimizer, epoch, best_loss, total_step, num_epochs)
+        validation_loss = validate(device, val_loader, encoder, decoder, criterion, epoch, total_step, num_epochs)
+        
+        if best_loss is None:
+            best_loss = validation_loss
+        # Save the model checkpoints
+        if validation_loss < best_loss:
+            best_loss = validation_loss
+            torch.save(decoder.state_dict(), os.path.join(
+                log_dir, 'decoder-{}.ckpt'.format(epoch+1)))
+            torch.save(encoder.state_dict(), os.path.join(
+                log_dir, 'encoder-{}.ckpt'.format(epoch+1)))
+        else:
+            epochs_since_last_improvement += 1
+        
+        if epochs_since_last_improvement == 100:
+            break
+
