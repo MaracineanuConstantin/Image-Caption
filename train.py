@@ -67,7 +67,7 @@ def main(args):
     for epoch in range(args.num_epochs):
         start = time.time()
         train_loss = train(args,data_loader, encoder, decoder, criterion, optimizer, epoch, best_loss, total_step)
-        validation_loss = validate(args, val_loader, encoder, decoder, criterion)
+        validation_loss = validate(args, val_loader, encoder, decoder, criterion, epoch, total_step)
         if best_loss is None:
             best_loss = validation_loss
         # Save the model checkpoints
