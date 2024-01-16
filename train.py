@@ -10,7 +10,7 @@ from build_vocab import Vocabulary
 from model import EncoderCNN, DecoderRNN
 from torch.nn.utils.rnn import pack_padded_sequence
 from torchvision import transforms
-from utils import AverageMeter
+from utils import AverageMeter, seed_everything
 import time
 from sacred import Experiment
 from sacred.observers import FileStorageObserver
@@ -52,6 +52,7 @@ def cfg():
     learning_rate = 1e-3
     best_loss = None
     epochs_since_last_improvement = 0
+    seed = seed_everything(468586835)
 
 @ex.capture
 def train(device, data_loader, encoder, decoder, criterion, optimizer, epoch, best_loss, total_step, num_epochs, log_step):
@@ -130,9 +131,9 @@ def validate(device, val_loader, encoder, decoder, criterion, epoch, total_step,
 @ex.automain
 def main(device, model_path, crop_size, vocab_path, train_dir, val_dir, caption_path, val_caption_path, 
         log_step, embed_size, hidden_size, num_layers, num_epochs, batch_size, num_workers, learning_rate, _run, best_loss, 
-        epochs_since_last_improvement):
+        epochs_since_last_improvement, seed):
 
-    
+    print(f'main {seed}')
     # Create directory for current time
     current_time = time.strftime("%Y-%m-%d_%H_%M_%S", time.localtime())
     log_dir = os.path.join(observers_directory, _run._id)
