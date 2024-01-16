@@ -64,8 +64,6 @@ def main(args):
     # Open the training log file
     f = open(args.log_file, 'w')
 
-    # Time per epoch
-    epoch_time = time.time()
     # Train the models
     total_step = len(data_loader)
     for epoch in range(args.num_epochs):
@@ -80,15 +78,17 @@ def main(args):
                 args.model_path, 'decoder-{}-{}.ckpt'.format(epoch+1, i+1)))
             torch.save(encoder.state_dict(), os.path.join(
                 args.model_path, 'encoder-{}-{}.ckpt'.format(epoch+1, i+1)))
-        end = time.time()
-        end_time = end - start
         f.write(f"Time on epoch {epoch} is: {end_time} + '\n")
         f.flush()
         
 def train(args,data_loader, encoder, decoder, criterion, optimizer, epoch, best_loss, total_step):
     losses = AverageMeter()
+    batch_time = AverageMeter()
+    data_time = AverageMeter()
+
+    start = time.time()
     for i, (images, captions, lengths) in enumerate(data_loader):
-            
+            data_time.update(time.time() - start)
             # Set mini-batch dataset
             images = images.to(device)
             captions = captions.to(device)
@@ -105,10 +105,13 @@ def train(args,data_loader, encoder, decoder, criterion, optimizer, epoch, best_
 
             # average batch loss
             losses.update(loss.item(), images.size(0))
+            batch_time.update(time.time() - start)
+
+            start = time.time()
 
             # Get training statistics.
-            stats = 'Epoch [{}/{}], Step [{}/{}], Loss: {:.4f}, Perplexity: {:5.4f}'.format(epoch, args.num_epochs, i, total_step, loss.item(), np.exp(loss.item()))
-
+            # stats = 'Epoch [{}/{}], Step [{}/{}], Loss: {:.4f}, Perplexity: {:5.4f}'.format(epoch, args.num_epochs, i, total_step, loss.item(), np.exp(loss.item()))
+            stats = f'Epoch [{epoch}/{args.num_epochs}], Step [{i}/{total_step}, Batch time {batch_time.avg:.3f}, Data time {data_time.avg:.3f}, Loss {loss.item():.3f}, Perplexity {np.exp(loss.item()):.3f}]'
             # Print training statistics .
             if (i+1) % args.log_step == 0:
                 print(stats)
