@@ -5,7 +5,7 @@ import numpy as np
 import os
 import sys
 import pickle
-from data_loader import get_loader 
+from data_loader import get_loader, validation_loader
 from build_vocab import Vocabulary
 from model import EncoderCNN, DecoderRNN
 from torch.nn.utils.rnn import pack_padded_sequence
@@ -20,13 +20,13 @@ import time
 ## TODO: Code refactor into functions
 ## TODO: best_loss = first loss
 ## TODO: BLEU4 eval metric
-## TODO: de facut media la loss la finaul unei epoci si dupa bucla de antrenat verificat best_loss
+## TODO: de facut media la loss la finalul unei epoci si dupa bucla de antrenat verificat best_loss
 
 # Device configuration
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 def main(args):
-    global best_loss, device
+    global best_loss
     best_loss = None
     # Create model directory
     if not os.path.exists(args.model_path):
@@ -48,9 +48,10 @@ def main(args):
     # Build data loader
     data_loader = get_loader(args.train_dir, args.caption_path, vocab, 
                              transform, args.batch_size,
-                             shuffle=True, num_workers=args.num_workers) 
-    # val_loader = val_loader(args.val_dir, args.val_caption_path, vocab, args.batch_size,
-    #                         num_workers=args.num_workers, transform=transform)
+                             shuffle=True, num_workers=args.num_workers)
+
+    val_loader = validation_loader(args.val_dir, args.val_caption_path, vocab, transform, args.batch_size,
+                            num_workers=args.num_workers)
 
     # Build the models
     encoder = EncoderCNN(args.embed_size).to(device)
@@ -61,14 +62,13 @@ def main(args):
     params = list(decoder.parameters()) + list(encoder.linear.parameters()) + list(encoder.bn.parameters())
     optimizer = torch.optim.Adam(params, lr=args.learning_rate)
 
-    # Open the training log file
-    f = open(args.log_file, 'w')
-
     # Train the models
     total_step = len(data_loader)
     for epoch in range(args.num_epochs):
         start = time.time()
         train_loss = train(args,data_loader, encoder, decoder, criterion, optimizer, epoch, best_loss, total_step)
+        # Validate the model on the validation set
+        validation_loss = validate(args, val_loader, encoder, decoder, criterion)
         if best_loss is None:
             best_loss = train_loss
         # Save the model checkpoints
@@ -78,9 +78,7 @@ def main(args):
                 args.model_path, 'decoder-{}-{}.ckpt'.format(epoch+1, i+1)))
             torch.save(encoder.state_dict(), os.path.join(
                 args.model_path, 'encoder-{}-{}.ckpt'.format(epoch+1, i+1)))
-        f.write(f"Time on epoch {epoch} is: {end_time} + '\n")
-        f.flush()
-        
+
 def train(args,data_loader, encoder, decoder, criterion, optimizer, epoch, best_loss, total_step):
     losses = AverageMeter()
     batch_time = AverageMeter()
@@ -110,14 +108,39 @@ def train(args,data_loader, encoder, decoder, criterion, optimizer, epoch, best_
             start = time.time()
 
             # Get training statistics.
-            # stats = 'Epoch [{}/{}], Step [{}/{}], Loss: {:.4f}, Perplexity: {:5.4f}'.format(epoch, args.num_epochs, i, total_step, loss.item(), np.exp(loss.item()))
-            stats = f'Epoch [{epoch}/{args.num_epochs}], Step [{i}/{total_step}, Batch time {batch_time.avg:.3f}, Data time {data_time.avg:.3f}, Loss {loss.item():.3f}, Perplexity {np.exp(loss.item()):.3f}]'
+            stats = f'Epoch [{epoch}/{args.num_epochs}], Step [{i}/{total_step}], Batch time {batch_time.avg:.3f}, Data time {data_time.avg:.3f}, Loss {loss.item():.3f}, Perplexity {np.exp(loss.item()):.3f}'
             # Print training statistics .
             if (i+1) % args.log_step == 0:
                 print(stats)
             
     return losses.avg
         
+def validate(args,val_loader, encoder, decoder, criterion, epoch, total_step):
+    encoder.eval()
+    decoder.eval()
+
+    batch_time = AverageMeter()
+    losses = AverageMeter()
+
+    start = time.time()
+
+    with torch.no_grad():
+        for i, (images, captions, lengths) in enumerate(val_loader):
+            images = images.to(device)
+            captions = captions.to(device)
+
+            targets = pack_padded_sequence(captions, lengths, batch_first=True)[0]
+            features = encoder(images)
+            outputs = decoder(features, captions, lengths)
+            loss = criterion(outputs, targets)
+
+            losses.update(loss.item(), images.size(0))
+            # stats = f'Epoch [{epoch}/{args.num_epochs}], Step [{i}/{total_step}], Batch time {batch_time.avg:.3f}, Loss {loss.item():.3f}'
+
+    
+    print(f'Validation loss: {losses.avg:.3f}')
+    return losses.avg
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
