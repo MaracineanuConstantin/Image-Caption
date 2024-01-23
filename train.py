@@ -10,20 +10,16 @@ from build_vocab import Vocabulary
 from model import EncoderCNN, DecoderRNN
 from torch.nn.utils.rnn import pack_padded_sequence
 from torchvision import transforms
-from utils import AverageMeter, seed_everything
+from utils import AverageMeter, seed_everything, save_encoder, save_decoder, load_checkpoint_encoder, load_checkpoint_decoder
 import time
 from sacred import Experiment
 from sacred.observers import FileStorageObserver
+from nltk.translate.bleu_score import corpus_bleu
 
-
-## TODO: check 1 image dataflow
-## check real img caption vs output caption
-## check sample.py
-## TODO: Implement sacred
-## TODO: Code refactor into functions
-## TODO: best_loss = first loss
 ## TODO: BLEU4 eval metric
-## TODO: de facut media la loss la finalul unei epoci si dupa bucla de antrenat verificat best_loss
+## de ce face padding pana la lungimea maxima
+## schimbat numele la model salvat
+## 
 
 
 # Create a sacred experiment
@@ -35,7 +31,6 @@ ex.observers.append(FileStorageObserver(observers_directory))
 @ex.config
 def cfg():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    model_path = 'models/'
     crop_size = 224
     vocab_path = 'data/vocab.pkl'
     train_dir = 'data/resized2014'
@@ -46,13 +41,14 @@ def cfg():
     embed_size = 256
     hidden_size = 512
     num_layers = 1
-    num_epochs = 10
+    num_epochs = 30
     batch_size = 128
-    num_workers = 2
+    num_workers = 0
     learning_rate = 1e-3
     best_loss = None
     epochs_since_last_improvement = 0
-    seed = seed_everything(468586835)
+    start_epoch = 0
+    seed = seed_everything(42)
 
 @ex.capture
 def train(device, data_loader, encoder, decoder, criterion, optimizer, epoch, best_loss, total_step, num_epochs, log_step):
@@ -65,11 +61,11 @@ def train(device, data_loader, encoder, decoder, criterion, optimizer, epoch, be
     start = time.time()
     for i, (images, captions, lengths) in enumerate(data_loader):
             data_time.update(time.time() - start)
-            # Set mini-batch dataset
             images = images.to(device)
             captions = captions.to(device)
             targets = pack_padded_sequence(captions, lengths, batch_first=True)[0]
-            
+            # captions au padding, lengths au marimile originale (inainte sa fie umplut cu 0 pana la max length)
+            # targets = valorile puse 
             # Forward, backward and optimize
             features = encoder(images)
             outputs = decoder(features, captions, lengths)
@@ -128,14 +124,15 @@ def validate(device, val_loader, encoder, decoder, criterion, epoch, total_step,
     return losses.avg
 
 
+
 @ex.automain
-def main(device, model_path, crop_size, vocab_path, train_dir, val_dir, caption_path, val_caption_path, 
+def main(device, crop_size, vocab_path, train_dir, val_dir, caption_path, val_caption_path, 
         log_step, embed_size, hidden_size, num_layers, num_epochs, batch_size, num_workers, learning_rate, _run, best_loss, 
-        epochs_since_last_improvement, seed):
+        epochs_since_last_improvement, start_epoch, seed):
 
     print(f'main {seed}')
-    # Create directory for current time
-    current_time = time.strftime("%Y-%m-%d_%H_%M_%S", time.localtime())
+
+    # create log directory to store the encoder & decoder
     log_dir = os.path.join(observers_directory, _run._id)
     os.makedirs(log_dir, exist_ok=True)
 
@@ -161,9 +158,17 @@ def main(device, model_path, crop_size, vocab_path, train_dir, val_dir, caption_
                             num_workers=num_workers)
 
     # Build the models
-    encoder = EncoderCNN(embed_size).to(device)
-    decoder = DecoderRNN(embed_size, hidden_size, len(vocab), num_layers).to(device)
+    # encoder = EncoderCNN(embed_size).to(device)
+    # decoder = DecoderRNN(embed_size, hidden_size, len(vocab), num_layers).to(device)
+
     
+    start_epoch, encoder, validation_loss, epochs_since_last_improvement = load_checkpoint_encoder("experiments/29/best_encoder.pth.tar", embed_size)
+    decoder = load_checkpoint_decoder("experiments/29/best_decoder.pth.tar", embed_size, hidden_size, vocab, num_layers, encoder, learning_rate)
+
+    encoder = encoder.to(device)
+    decoder = decoder.to(device)
+
+
     # Loss and optimizer
     criterion = nn.CrossEntropyLoss()
     params = list(decoder.parameters()) + list(encoder.linear.parameters()) + list(encoder.bn.parameters())
@@ -171,23 +176,26 @@ def main(device, model_path, crop_size, vocab_path, train_dir, val_dir, caption_
 
     # Train the models
     total_step = len(data_loader)
-    for epoch in range(num_epochs):
+    for epoch in range(start_epoch, num_epochs):
         start = time.time()
         train_loss = train(device, data_loader, encoder, decoder, criterion, optimizer, epoch, best_loss, total_step, num_epochs)
         validation_loss = validate(device, val_loader, encoder, decoder, criterion, epoch, total_step, num_epochs)
-        
+
         if best_loss is None:
             best_loss = validation_loss
+
+
+
         # Save the model checkpoints
         if validation_loss < best_loss:
             best_loss = validation_loss
-            torch.save(decoder.state_dict(), os.path.join(
-                log_dir, 'decoder-{}.ckpt'.format(epoch+1)))
-            torch.save(encoder.state_dict(), os.path.join(
-                log_dir, 'encoder-{}.ckpt'.format(epoch+1)))
+            epochs_since_last_improvement = 0
+            save_encoder(epoch, encoder, optimizer, validation_loss, epochs_since_last_improvement, log_dir)
+            save_decoder(epoch, decoder, optimizer, validation_loss, epochs_since_last_improvement, log_dir)
+
         else:
             epochs_since_last_improvement += 1
         
         if epochs_since_last_improvement == 100:
             break
-
+        
