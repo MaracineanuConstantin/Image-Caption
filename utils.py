@@ -15,6 +15,27 @@ def seed_everything(seed: int):
     return seed
 
 
+def save_checkpoint(epoch, encoder, decoder, optimizer, loss, epochs_since_last_improvement, save_path):
+    """
+    Save model checkpoint.
+
+    :param epoch: epoch number
+    :param model: model
+    :param optimizer: optimizer
+    """
+    state = {'epoch': epoch,
+             'encoder':encoder.state_dict(),
+             'decoder':decoder.state_dict(),
+             'optimizer':optimizer.state_dict(),
+             'loss': loss,
+             'epochs_since_last_improvement': epochs_since_last_improvement}
+    
+    filename = f'best_model.pth.tar'
+    save_file = os.path.join(save_path, filename)
+    torch.save(state, save_file)
+
+
+
 def save_encoder(epoch, model, optimizer, loss, epochs_since_last_improvement, save_path):
     """
     Save model checkpoint.
@@ -51,6 +72,24 @@ def save_decoder(epoch, model, optimizer, loss, epochs_since_last_improvement, s
     filename = f'best_decoder.pth.tar'
     save_file = os.path.join(save_path,filename)
     torch.save(state, save_file)
+
+
+def load_checkpoint(checkpoint, embed_size, hidden_size, vocab, num_layers, learning_rate):
+    checkpoint = torch.load(checkpoint)
+    epoch = checkpoint['epoch']
+    print('\nLoaded checkpoint from epoch %d.\n' % epoch)
+    encoder = EncoderCNN(embed_size)
+    encoder.load_state_dict(checkpoint['encoder'])
+    
+    decoder = DecoderRNN(embed_size, hidden_size, len(vocab), num_layers)
+    decoder.load_state_dict = checkpoint['decoder']
+
+    validation_loss = checkpoint['loss']
+    epochs_since_last_improvement = checkpoint['epochs_since_last_improvement']
+
+    return epoch, encoder, decoder, validation_loss, epochs_since_last_improvement
+
+
 
 
 def load_checkpoint_encoder(checkpoint, embed_size):
