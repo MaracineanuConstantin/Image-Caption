@@ -15,12 +15,12 @@ import time
 from sacred import Experiment
 from sacred.observers import FileStorageObserver
 from nltk.translate.bleu_score import corpus_bleu
-
-## TODO: folosit NLGEval din referinta https://github.com/poojahira/image-captioning-bottom-up-top-down/blob/master/train.py
-## implementat bleu4 ( comparat bleu4 implementat vs nlgeval bleu4)
-## de ce face padding pana la lungimea maxima
+from nlgmetricverse import NLGMetricverse, load_metric
 
 
+## de antrenat in functie de validation loss dar verificat/calculat de asemenea metricile
+## OPTIONAL: de salvat imaginea la fiecare etapa din ANTRENARE
+## eventual salvat sub fiecare strat numarul/numele layer-ului
 
 # Create a sacred experiment
 ex = Experiment("train_experiment")
@@ -37,11 +37,11 @@ def cfg():
     val_dir = 'data/resizedval2014'
     caption_path = 'data/annotations/captions_train2014.json'
     val_caption_path = 'data/annotations/captions_val2014.json'
-    log_step = 100
+    log_step = 1
     embed_size = 256
     hidden_size = 512
     num_layers = 1
-    num_epochs = 5
+    num_epochs = 10
     batch_size = 128
     num_workers = 0
     learning_rate = 1e-3
@@ -86,6 +86,8 @@ def train(device, data_loader, encoder, decoder, criterion, optimizer, epoch, be
             # Print training statistics .
             if (i+1) % log_step == 0:
                 print(stats)
+            
+            # print(f'Training epoch [{epoch}/{num_epochs}], Step [{i}/{total_step}], Batch time {batch_time.avg:.3f}, Data time {data_time.avg:.3f}, Loss {loss.item():.3f}, Perplexity {np.exp(loss.item()):.3f}')
 
     ex.log_scalar('Train/Loss', losses.avg, epoch)
     print(f'Training loss: {losses.avg}')
@@ -114,12 +116,13 @@ def validate(device, val_loader, encoder, decoder, criterion, epoch, total_step,
             # = crossentropyloss: -(SUM(ground truth - log(targets)) 
             losses.update(loss.item(), images.size(0))
 
-            stats = f'Validation epoch [{epoch}/{num_epochs}], Step [{i}/{total_step}], Batch time {batch_time.avg:.3f}, Loss {loss.item():.3f}'
+            stats = f'Validation epoch [{epoch}/{num_epochs}], Step [{i}/{len(val_loader)}], Batch time {batch_time.avg:.3f}, Loss {loss.item():.3f}'
             # Print training statistics .
             if (i+1) % log_step == 0:
                 print(stats)
 
     ex.log_scalar('Validation/Loss', losses.avg, epoch)
+    # ex.log_scalar('Bleu loss', scorer['bleu']['score'])
     print(f'Validation loss: {losses.avg:.3f}')
     return losses.avg
 
@@ -158,12 +161,11 @@ def main(device, crop_size, vocab_path, train_dir, val_dir, caption_path, val_ca
                             num_workers=num_workers)
 
     # Build the models
-    encoder = EncoderCNN(embed_size).to(device)
-    decoder = DecoderRNN(embed_size, hidden_size, len(vocab), num_layers).to(device)
+    # encoder = EncoderCNN(embed_size).to(device)
+    # decoder = DecoderRNN(embed_size, hidden_size, len(vocab), num_layers).to(device)
 
     
-    # start_epoch, encoder, decoder, validation_loss, epochs_since_last_improvement = load_checkpoint("experiments/38/best_model.pth.tar", embed_size, hidden_size, vocab, num_layers, learning_rate)
-    # decoder = load_checkpoint_decoder("experiments/29/best_decoder.pth.tar", embed_size, hidden_size, vocab, num_layers, encoder, learning_rate)
+    start_epoch, encoder, decoder, validation_loss, epochs_since_last_improvement = load_checkpoint("experiments/24/best_model.pth.tar", embed_size, hidden_size, vocab, num_layers, learning_rate)
 
     encoder = encoder.to(device)
     decoder = decoder.to(device)
@@ -184,14 +186,10 @@ def main(device, crop_size, vocab_path, train_dir, val_dir, caption_path, val_ca
         if best_loss is None:
             best_loss = validation_loss
 
-
-
         # Save the model checkpoints
         if validation_loss < best_loss:
             best_loss = validation_loss
             epochs_since_last_improvement = 0
-            # save_encoder(epoch, encoder, optimizer, validation_loss, epochs_since_last_improvement, log_dir)
-            # save_decoder(epoch, decoder, optimizer, validation_loss, epochs_since_last_improvement, log_dir)
             save_checkpoint(epoch, encoder, decoder, optimizer, validation_loss, epochs_since_last_improvement, log_dir)
         else:
             epochs_since_last_improvement += 1

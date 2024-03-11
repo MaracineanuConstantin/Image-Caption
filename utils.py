@@ -34,46 +34,6 @@ def save_checkpoint(epoch, encoder, decoder, optimizer, loss, epochs_since_last_
     save_file = os.path.join(save_path, filename)
     torch.save(state, save_file)
 
-
-
-def save_encoder(epoch, model, optimizer, loss, epochs_since_last_improvement, save_path):
-    """
-    Save model checkpoint.
-
-    :param epoch: epoch number
-    :param model: model
-    :param optimizer: optimizer
-    """
-    state = {'epoch': epoch,
-             'model': model.state_dict(),
-             'optimizer': optimizer.state_dict(),
-             'loss' : loss,
-             'epochs_since_last_improvement' : epochs_since_last_improvement}
-
-    filename = f'best_encoder.pth.tar'
-    save_file = os.path.join(save_path,filename)
-    torch.save(state, save_file)
-
-
-def save_decoder(epoch, model, optimizer, loss, epochs_since_last_improvement, save_path):
-    """
-    Save model checkpoint.
-
-    :param epoch: epoch number
-    :param model: model
-    :param optimizer: optimizer
-    """
-    state = {'epoch': epoch,
-             'model': model.state_dict(),
-             'optimizer': optimizer.state_dict(),
-             'loss' : loss,
-             'epochs_since_last_improvement' : epochs_since_last_improvement}
-
-    filename = f'best_decoder.pth.tar'
-    save_file = os.path.join(save_path,filename)
-    torch.save(state, save_file)
-
-
 def load_checkpoint(checkpoint, embed_size, hidden_size, vocab, num_layers, learning_rate):
     checkpoint = torch.load(checkpoint)
     epoch = checkpoint['epoch']
@@ -90,32 +50,6 @@ def load_checkpoint(checkpoint, embed_size, hidden_size, vocab, num_layers, lear
     return epoch, encoder, decoder, validation_loss, epochs_since_last_improvement
 
 
-
-
-def load_checkpoint_encoder(checkpoint, embed_size):
-    checkpoint = torch.load(checkpoint)
-    epoch = checkpoint['epoch']
-    print('\nLoaded checkpoint from epoch %d.\n' % epoch)
-    encoder = EncoderCNN(embed_size)
-    encoder.load_state_dict(checkpoint['model'])
-
-    validation_loss = checkpoint['loss']
-    epochs_since_last_improvement = checkpoint['epochs_since_last_improvement']
-
-    return epoch, encoder, validation_loss, epochs_since_last_improvement
-
-def load_checkpoint_decoder(checkpoint,embed_size, hidden_size, vocab, num_layers, encoder, learning_rate):
-    checkpoint = torch.load(checkpoint)
-    decoder = DecoderRNN(embed_size, hidden_size, len(vocab), num_layers)
-    decoder.load_state_dict = checkpoint['model']
-
-    # daca pastrez optimizer aici (aici ci nu in encoder pentru ca aici am acces si la decoder si la encoder) imi da eroare 
-    # de device in train
-    # params = list(decoder.parameters()) + list(encoder.linear.parameters()) + list(encoder.bn.parameters())
-    # optimizer = torch.optim.Adam(params, lr=learning_rate)
-    # optimizer.load_state_dict(checkpoint['optimizer'])
-
-    return decoder
 
 class AverageMeter(object):
     """
