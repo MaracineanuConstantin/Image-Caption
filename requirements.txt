@@ -1,5 +1,9 @@
 matplotlib
-nltk
+nltk==3.7
 numpy
-Pillow
+Pillow==9.5
 argparse
+nlg-metricverse
+numpy==1.26.2
+sacred==0.8.5
+tensorflow==2.10.0
