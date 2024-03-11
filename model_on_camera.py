@@ -18,7 +18,8 @@ import pyrealsense2
 from realsense_depth import *
 
 # Initialize Camera Intel Realsense
-dc = DepthCamera()
+# dc = DepthCamera()
+vid = cv2.VideoCapture(0)
 
 # Device configuration
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -58,13 +59,14 @@ def main():
     encoder.load_state_dict(torch.load(encoder_path))
     decoder.load_state_dict(torch.load(decoder_path))
 
+    ## TODO: remove saving frame to file
     while True:
-        ret, depth_frame, color_frame = dc.get_frame()
-        time.sleep(2)
+        # ret, depth_frame, color_frame = dc.get_frame()
+        ret, color_frame = vid.read()
+        # time.sleep(2)
         # Save color frame as an image file
         image_path = 'temp_image.jpg'
         cv2.imwrite(image_path, color_frame)
-
 
         image = load_image(image_path, transform)
         image_tensor = image.to(device)
