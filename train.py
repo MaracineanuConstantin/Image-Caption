@@ -16,7 +16,7 @@ from sacred import Experiment
 from sacred.observers import FileStorageObserver
 from nltk.translate.bleu_score import corpus_bleu
 from nlgmetricverse import NLGMetricverse, load_metric
-
+from torch.utils.tensorboard import SummaryWriter
 
 ## de antrenat in functie de validation loss dar verificat/calculat de asemenea metricile
 ## OPTIONAL: de salvat imaginea la fiecare etapa din ANTRENARE
@@ -41,8 +41,8 @@ def cfg():
     embed_size = 256
     hidden_size = 512
     num_layers = 1
-    num_epochs = 5
-    batch_size = 256
+    num_epochs = 15
+    batch_size = 128
     num_workers = 0
     learning_rate = 1e-3
     best_loss = None
@@ -51,7 +51,7 @@ def cfg():
     seed = seed_everything(42)
 
 @ex.capture
-def train(device, data_loader, encoder, decoder, criterion, optimizer, epoch, best_loss, total_step, num_epochs, log_step):
+def train(device, data_loader, encoder, decoder, criterion, optimizer, epoch, best_loss, total_step, num_epochs, log_step, writer):
     encoder.train()
     decoder.train()
     losses = AverageMeter()
@@ -90,12 +90,13 @@ def train(device, data_loader, encoder, decoder, criterion, optimizer, epoch, be
             # print(f'Training epoch [{epoch}/{num_epochs}], Step [{i}/{total_step}], Batch time {batch_time.avg:.3f}, Data time {data_time.avg:.3f}, Loss {loss.item():.3f}, Perplexity {np.exp(loss.item()):.3f}')
 
     ex.log_scalar('Train/Loss', losses.avg, epoch)
+    writer.add_scalar("Loss/Train", losses.avg, epoch)
     print(f'Training loss: {losses.avg}')
     return losses.avg
 
 
 @ex.capture
-def validate(device, val_loader, encoder, decoder, criterion, epoch, total_step, num_epochs, log_step):
+def validate(device, val_loader, encoder, decoder, criterion, epoch, total_step, num_epochs, log_step, writer):
     encoder.eval()
     decoder.eval()
     batch_time = AverageMeter()
@@ -121,7 +122,7 @@ def validate(device, val_loader, encoder, decoder, criterion, epoch, total_step,
                 print(stats)
 
     ex.log_scalar('Validation/Loss', losses.avg, epoch)
-    # ex.log_scalar('Bleu loss', scorer['bleu']['score'])
+    writer.add_scalar("Loss/Val", losses.avg, epoch)
     print(f'Validation loss: {losses.avg:.3f}')
     return losses.avg
 
@@ -136,7 +137,8 @@ def main(device, crop_size, vocab_path, train_dir, val_dir, caption_path, val_ca
 
     # create log directory to store the encoder & decoder
     log_dir = os.path.join(observers_directory, _run._id)
-    # os.makedirs(log_dir, exist_ok=True)
+
+    writer = SummaryWriter(log_dir=log_dir)
 
     # Image preprocessing, normalization for the pretrained resnet
     transform = transforms.Compose([ 
@@ -169,7 +171,6 @@ def main(device, crop_size, vocab_path, train_dir, val_dir, caption_path, val_ca
     encoder = encoder.to(device)
     decoder = decoder.to(device)
 
-
     # Loss and optimizer
     criterion = nn.CrossEntropyLoss()
     params = list(decoder.parameters()) + list(encoder.linear.parameters()) + list(encoder.bn.parameters())
@@ -179,8 +180,8 @@ def main(device, crop_size, vocab_path, train_dir, val_dir, caption_path, val_ca
     total_step = len(data_loader)
     for epoch in range(start_epoch, num_epochs):
         start = time.time()
-        train_loss = train(device, data_loader, encoder, decoder, criterion, optimizer, epoch, best_loss, total_step, num_epochs)
-        validation_loss = validate(device, val_loader, encoder, decoder, criterion, epoch, total_step, num_epochs)
+        train_loss = train(device, data_loader, encoder, decoder, criterion, optimizer, epoch, best_loss, total_step, num_epochs, writer=writer)
+        validation_loss = validate(device, val_loader, encoder, decoder, criterion, epoch, total_step, num_epochs, writer=writer)
 
         if best_loss is None:
             best_loss = validation_loss
@@ -199,4 +200,6 @@ def main(device, crop_size, vocab_path, train_dir, val_dir, caption_path, val_ca
         
         if epochs_since_last_improvement == 100:
             break
+    
+    writer.close()
         
