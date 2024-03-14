@@ -30,7 +30,7 @@ def save_checkpoint(epoch, encoder, decoder, optimizer, loss, epochs_since_last_
              'loss': loss,
              'epochs_since_last_improvement': epochs_since_last_improvement}
     
-    filename = f'best_model.pth.tar'
+    filename = f'best_model_{epoch}.pth.tar'
     save_file = os.path.join(save_path, filename)
     torch.save(state, save_file)
 

@@ -10,7 +10,7 @@ from build_vocab import Vocabulary
 from model import EncoderCNN, DecoderRNN
 from torch.nn.utils.rnn import pack_padded_sequence
 from torchvision import transforms
-from utils import AverageMeter, seed_everything, save_encoder, save_decoder, load_checkpoint_encoder, load_checkpoint_decoder, save_checkpoint, load_checkpoint
+from utils import AverageMeter, seed_everything, save_checkpoint, load_checkpoint
 import time
 from sacred import Experiment
 from sacred.observers import FileStorageObserver
@@ -41,7 +41,7 @@ def cfg():
     embed_size = 256
     hidden_size = 512
     num_layers = 1
-    num_epochs = 10
+    num_epochs = 5
     batch_size = 128
     num_workers = 0
     learning_rate = 1e-3
@@ -98,7 +98,6 @@ def train(device, data_loader, encoder, decoder, criterion, optimizer, epoch, be
 def validate(device, val_loader, encoder, decoder, criterion, epoch, total_step, num_epochs, log_step):
     encoder.eval()
     decoder.eval()
-
     batch_time = AverageMeter()
     losses = AverageMeter()
 
@@ -191,6 +190,10 @@ def main(device, crop_size, vocab_path, train_dir, val_dir, caption_path, val_ca
             best_loss = validation_loss
             epochs_since_last_improvement = 0
             save_checkpoint(epoch, encoder, decoder, optimizer, validation_loss, epochs_since_last_improvement, log_dir)
+        
+        if epoch == (num_epochs-1):
+            save_checkpoint(epoch, encoder, decoder, optimizer, validation_loss, epochs_since_last_improvement, log_dir)
+            
         else:
             epochs_since_last_improvement += 1
         
