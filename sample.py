@@ -1,4 +1,6 @@
 import torch
+from model import EncoderCNN, DecoderRNN
+from utils import load_checkpoint
 import matplotlib.pyplot as plt
 import numpy as np 
 import argparse
@@ -6,8 +8,8 @@ import pickle
 import os
 from torchvision import transforms 
 from build_vocab import Vocabulary
-from model import EncoderCNN, DecoderRNN
 from PIL import Image
+import random
 
 
 # Device configuration
@@ -23,6 +25,19 @@ def load_image(image_path, transform=None):
     return image
 
 def main(args):
+        # config params
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    vocab_path = 'data/vocab.pkl'
+    val_dir = 'data/resizedval2014'
+    val_caption_path = 'data/annotations/captions_val2014.json'
+    embed_size = 256
+    hidden_size = 512
+    num_layers = 1
+    batch_size = 128
+    num_workers = 0
+    learning_rate = 0.001
+    image_path = 'png/biciclisti.png'
+
     # Image preprocessing
     transform = transforms.Compose([
         transforms.ToTensor(), 
@@ -34,17 +49,17 @@ def main(args):
         vocab = pickle.load(f)
 
     # Build models
-    encoder = EncoderCNN(args.embed_size).eval()  # eval mode (batchnorm uses moving mean/variance)
-    decoder = DecoderRNN(args.embed_size, args.hidden_size, len(vocab), args.num_layers)
-    encoder = encoder.to(device)
-    decoder = decoder.to(device)
+    start_epoch, encoder, decoder, validation_loss, epochs_since_last_improvement = load_checkpoint("experiments/3/best_model_14.ckpt", embed_size, hidden_size, vocab, num_layers, learning_rate)
 
-    # Load the trained model parameters
-    encoder.load_state_dict(torch.load(args.encoder_path))
-    decoder.load_state_dict(torch.load(args.decoder_path))
+    encoder.to(device)
+    decoder.to(device)
+
+    encoder.eval()
+    decoder.eval()
+
 
     # Prepare an image
-    image = load_image(args.image, transform)
+    image = load_image(image_path, transform)
     image_tensor = image.to(device)
     
     # Generate an caption from the image
@@ -68,9 +83,10 @@ def main(args):
     
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--image', type=str, required=True, help='input image for generating caption')
-    parser.add_argument('--encoder_path', type=str, default='models/encoder-5-3000.pkl', help='path for trained encoder')
-    parser.add_argument('--decoder_path', type=str, default='models/decoder-5-3000.pkl', help='path for trained decoder')
+    parser.add_argument('--image', type=str,default="png/biciclisti.png", help='input image for generating caption')
+    # parser.add_argument('--image', type=str,default="data/val2014/COCO_val2014_000000000143.jpg", help='input image for generating caption')
+    # parser.add_argument('--encoder_path', type=str, default='models/encoder-12-205.ckpt', help='path for trained encoder')
+    # parser.add_argument('--decoder_path', type=str, default='models/decoder-12-205.ckpt', help='path for trained decoder')
     parser.add_argument('--vocab_path', type=str, default='data/vocab.pkl', help='path for vocabulary wrapper')
     
     # Model parameters (should be same as paramters in train.py)
