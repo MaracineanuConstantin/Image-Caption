@@ -37,11 +37,11 @@ def cfg():
     val_dir = 'data/resizedval2014'
     caption_path = 'data/annotations/captions_train2014.json'
     val_caption_path = 'data/annotations/captions_val2014.json'
-    log_step = 1
+    log_step = 16
     embed_size = 256
     hidden_size = 512
     num_layers = 1
-    num_epochs = 15
+    num_epochs = 10
     batch_size = 128
     num_workers = 0
     learning_rate = 1e-3
@@ -51,7 +51,7 @@ def cfg():
     seed = seed_everything(42)
 
 @ex.capture
-def train(device, data_loader, encoder, decoder, criterion, optimizer, epoch, best_loss, total_step, num_epochs, log_step, writer):
+def train(device, data_loader, encoder, decoder, criterion, optimizer, epoch, best_loss, total_step, num_epochs, log_step, writer, metrics):
     encoder.train()
     decoder.train()
     losses = AverageMeter()
@@ -95,36 +95,75 @@ def train(device, data_loader, encoder, decoder, criterion, optimizer, epoch, be
     return losses.avg
 
 
+# @ex.capture
+# def validate(device, val_loader, encoder, decoder, criterion, epoch, total_step, num_epochs, log_step, writer):
+#     encoder.eval()
+#     decoder.eval()
+#     batch_time = AverageMeter()
+#     losses = AverageMeter()
+
+#     start = time.time()
+
+#     with torch.no_grad():
+#         for i, (images, captions, lengths) in enumerate(val_loader):
+#             images = images.to(device)
+#             captions = captions.to(device)
+
+#             targets = pack_padded_sequence(captions, lengths, batch_first=True)[0]
+#             features = encoder(images)
+#             outputs = decoder(features, captions, lengths)
+#             loss = criterion(outputs, targets)
+#             # = crossentropyloss: -(SUM(ground truth - log(targets)) 
+#             losses.update(loss.item(), images.size(0))
+
+#             stats = f'Validation epoch [{epoch}/{num_epochs}], Step [{i}/{len(val_loader)}], Batch time {batch_time.avg:.3f}, Loss {loss.item():.3f}'
+#             # Print training statistics .
+#             if (i+1) % log_step == 0:
+#                 print(stats)
+
+#     ex.log_scalar('Validation/Loss', losses.avg, epoch)
+#     writer.add_scalar("Loss/Val", losses.avg, epoch)
+#     print(f'Validation loss: {losses.avg:.3f}')
+#     return losses.avg
+
+
+
 @ex.capture
-def validate(device, val_loader, encoder, decoder, criterion, epoch, total_step, num_epochs, log_step, writer):
+def word_validation(device, val_loader, encoder, decoder, criterion, epoch, total_step, num_epochs, log_step, writer, vocab, metrics):
     encoder.eval()
     decoder.eval()
+
     batch_time = AverageMeter()
     losses = AverageMeter()
 
+    reference_caption = []
+    generated_caption = []
+
     start = time.time()
 
-    with torch.no_grad():
-        for i, (images, captions, lengths) in enumerate(val_loader):
-            images = images.to(device)
-            captions = captions.to(device)
+    for i, (images, captions, lengths) in enumerate(val_loader):
+        images = images.to(device)
+        captions = captions.to(device)
 
-            targets = pack_padded_sequence(captions, lengths, batch_first=True)[0]
-            features = encoder(images)
-            outputs = decoder(features, captions, lengths)
-            loss = criterion(outputs, targets)
-            # = crossentropyloss: -(SUM(ground truth - log(targets)) 
-            losses.update(loss.item(), images.size(0))
+        features = encoder(images)
+        outputs = decoder.sample(features)
 
-            stats = f'Validation epoch [{epoch}/{num_epochs}], Step [{i}/{len(val_loader)}], Batch time {batch_time.avg:.3f}, Loss {loss.item():.3f}'
-            # Print training statistics .
-            if (i+1) % log_step == 0:
-                print(stats)
+        generated_caption.extend(outputs.cpu().numpy().tolist())
+        reference_caption.extend(captions.cpu().numpy().tolist())
+        print("ceva")
+    
+    generated_words = [[vocab.idx2word[word] for word in indexes if vocab.idx2word[word] not in ['<start>', '<end>']] for indexes in generated_caption]
+    reference_words = [[vocab.idx2word[word] for word in indexes if vocab.idx2word[word] not in ['<start>', '<end>']] for indexes in reference_caption]
 
-    ex.log_scalar('Validation/Loss', losses.avg, epoch)
-    writer.add_scalar("Loss/Val", losses.avg, epoch)
-    print(f'Validation loss: {losses.avg:.3f}')
-    return losses.avg
+    # convert to strings for metrics evaluation
+    generated_words_strings = [' '.join(sentence) for sentence in generated_words]
+    reference_words_strings = [' '.join(sentence) for sentence in reference_words]
+
+    # scorer = NLGMetricverse(metrics=load_metric("bleu"))
+    scorer = NLGMetricverse(metrics=metrics)
+    scores = scorer(predictions=generated_words_strings, references=reference_words_strings)
+    print(f"imported scores are: {scores}")
+    return 1
 
 
 
@@ -176,13 +215,24 @@ def main(device, crop_size, vocab_path, train_dir, val_dir, caption_path, val_ca
     params = list(decoder.parameters()) + list(encoder.linear.parameters()) + list(encoder.bn.parameters())
     optimizer = torch.optim.Adam(params, lr=learning_rate)
 
+
+    # Evaluation metrics
+    metrics = [
+    load_metric("bleu"),
+    load_metric("rouge"),
+    load_metric("meteor"),
+    load_metric("cider")
+    ]
+
     # Train the models
     total_step = len(data_loader)
     for epoch in range(start_epoch, num_epochs):
         start = time.time()
-        train_loss = train(device, data_loader, encoder, decoder, criterion, optimizer, epoch, best_loss, total_step, num_epochs, writer=writer)
-        validation_loss = validate(device, val_loader, encoder, decoder, criterion, epoch, total_step, num_epochs, writer=writer)
-
+        train_loss = train(device=device, data_loader=data_loader, encoder=encoder, decoder=decoder, criterion=criterion, optimizer=optimizer, epoch=epoch, best_loss=best_loss, 
+        total_step=total_step, num_epochs=num_epochs,log_step=log_step, writer=writer, metrics=metrics)
+        # validation_loss = validate(device, val_loader, encoder, decoder, criterion, epoch, total_step, num_epochs, writer=writer)
+        word_loss = word_validation(device=device, val_loader=val_loader, encoder=encoder, decoder=decoder, criterion=criterion, epoch=epoch, total_step=total_step, 
+        num_epochs=num_epochs, log_step=log_step, writer=writer, vocab=vocab, metrics=metrics)
         if best_loss is None:
             best_loss = validation_loss
 
