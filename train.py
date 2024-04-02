@@ -41,7 +41,7 @@ def cfg():
     embed_size = 256
     hidden_size = 512
     num_layers = 1
-    num_epochs = 10
+    num_epochs = 40
     batch_size = 128
     num_workers = 0
     learning_rate = 1e-3
@@ -51,12 +51,15 @@ def cfg():
     seed = seed_everything(42)
 
 @ex.capture
-def train(device, data_loader, encoder, decoder, criterion, optimizer, epoch, best_loss, total_step, num_epochs, log_step, writer, metrics):
+def train(device, data_loader, encoder, decoder, criterion, optimizer, epoch, best_loss, total_step, num_epochs, log_step, writer, scorer, vocab):
     encoder.train()
     decoder.train()
     losses = AverageMeter()
     batch_time = AverageMeter()
     data_time = AverageMeter()
+
+    reference_caption = []
+    generated_caption = []
 
     start = time.time()
     for i, (images, captions, lengths) in enumerate(data_loader):
@@ -75,6 +78,12 @@ def train(device, data_loader, encoder, decoder, criterion, optimizer, epoch, be
             loss.backward()
             optimizer.step()
 
+            
+            index_outputs = decoder.sample(features)
+
+            generated_caption.extend(index_outputs.cpu().numpy().tolist())
+            reference_caption.extend(captions.cpu().numpy().tolist())
+            
             # average batch loss
             losses.update(loss.item(), images.size(0))
             batch_time.update(time.time() - start)
@@ -88,6 +97,18 @@ def train(device, data_loader, encoder, decoder, criterion, optimizer, epoch, be
                 print(stats)
             
             # print(f'Training epoch [{epoch}/{num_epochs}], Step [{i}/{total_step}], Batch time {batch_time.avg:.3f}, Data time {data_time.avg:.3f}, Loss {loss.item():.3f}, Perplexity {np.exp(loss.item()):.3f}')
+
+
+    generated_words = [[vocab.idx2word[word] for word in indexes if vocab.idx2word[word] not in ['<start>', '<end>']] for indexes in generated_caption]
+    reference_words = [[vocab.idx2word[word] for word in indexes if vocab.idx2word[word] not in ['<start>', '<end>']] for indexes in reference_caption]
+
+    # convert to strings for metrics evaluation
+    generated_words_strings = [' '.join(sentence) for sentence in generated_words]
+    reference_words_strings = [' '.join(sentence) for sentence in reference_words]
+
+
+    scores = scorer(predictions=generated_words_strings, references=reference_words_strings)
+    print(f"Train scores are: {scores}")
 
     ex.log_scalar('Train/Loss', losses.avg, epoch)
     writer.add_scalar("Loss/Train", losses.avg, epoch)
@@ -129,7 +150,7 @@ def train(device, data_loader, encoder, decoder, criterion, optimizer, epoch, be
 
 
 @ex.capture
-def word_validation(device, val_loader, encoder, decoder, criterion, epoch, total_step, num_epochs, log_step, writer, vocab, metrics):
+def word_validation(device, val_loader, encoder, decoder, criterion, epoch, total_step, num_epochs, log_step, writer, vocab, scorer):
     encoder.eval()
     decoder.eval()
 
@@ -150,7 +171,6 @@ def word_validation(device, val_loader, encoder, decoder, criterion, epoch, tota
 
         generated_caption.extend(outputs.cpu().numpy().tolist())
         reference_caption.extend(captions.cpu().numpy().tolist())
-        print("ceva")
     
     generated_words = [[vocab.idx2word[word] for word in indexes if vocab.idx2word[word] not in ['<start>', '<end>']] for indexes in generated_caption]
     reference_words = [[vocab.idx2word[word] for word in indexes if vocab.idx2word[word] not in ['<start>', '<end>']] for indexes in reference_caption]
@@ -159,11 +179,11 @@ def word_validation(device, val_loader, encoder, decoder, criterion, epoch, tota
     generated_words_strings = [' '.join(sentence) for sentence in generated_words]
     reference_words_strings = [' '.join(sentence) for sentence in reference_words]
 
-    # scorer = NLGMetricverse(metrics=load_metric("bleu"))
-    scorer = NLGMetricverse(metrics=metrics)
+
     scores = scorer(predictions=generated_words_strings, references=reference_words_strings)
-    print(f"imported scores are: {scores}")
-    return 1
+    print(f"Validation scores are: {scores}")
+    bleu_loss = scores['bleu']['score']
+    return bleu_loss
 
 
 
@@ -201,11 +221,11 @@ def main(device, crop_size, vocab_path, train_dir, val_dir, caption_path, val_ca
                             num_workers=num_workers)
 
     # Build the models
-    encoder = EncoderCNN(embed_size).to(device)
-    decoder = DecoderRNN(embed_size, hidden_size, len(vocab), num_layers).to(device)
+    # encoder = EncoderCNN(embed_size).to(device)
+    # decoder = DecoderRNN(embed_size, hidden_size, len(vocab), num_layers).to(device)
 
     
-    # start_epoch, encoder, decoder, validation_loss, epochs_since_last_improvement = load_checkpoint("experiments/24/best_model.pth.tar", embed_size, hidden_size, vocab, num_layers, learning_rate)
+    start_epoch, encoder, decoder, validation_loss, epochs_since_last_improvement = load_checkpoint("experiments/3/best_model_29.pth.tar", embed_size, hidden_size, vocab, num_layers, learning_rate)
 
     encoder = encoder.to(device)
     decoder = decoder.to(device)
@@ -224,15 +244,20 @@ def main(device, crop_size, vocab_path, train_dir, val_dir, caption_path, val_ca
     load_metric("cider")
     ]
 
+    scorer = NLGMetricverse(metrics=metrics)
     # Train the models
     total_step = len(data_loader)
     for epoch in range(start_epoch, num_epochs):
         start = time.time()
+
         train_loss = train(device=device, data_loader=data_loader, encoder=encoder, decoder=decoder, criterion=criterion, optimizer=optimizer, epoch=epoch, best_loss=best_loss, 
-        total_step=total_step, num_epochs=num_epochs,log_step=log_step, writer=writer, metrics=metrics)
+        total_step=total_step, num_epochs=num_epochs,log_step=log_step, writer=writer, scorer=scorer, vocab=vocab)
+
         # validation_loss = validate(device, val_loader, encoder, decoder, criterion, epoch, total_step, num_epochs, writer=writer)
-        word_loss = word_validation(device=device, val_loader=val_loader, encoder=encoder, decoder=decoder, criterion=criterion, epoch=epoch, total_step=total_step, 
-        num_epochs=num_epochs, log_step=log_step, writer=writer, vocab=vocab, metrics=metrics)
+
+        validation_loss = word_validation(device=device, val_loader=val_loader, encoder=encoder, decoder=decoder, criterion=criterion, epoch=epoch, total_step=total_step, 
+        num_epochs=num_epochs, log_step=log_step, writer=writer, vocab=vocab, scorer=scorer)
+
         if best_loss is None:
             best_loss = validation_loss
 
