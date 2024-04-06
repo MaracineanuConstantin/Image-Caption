@@ -41,7 +41,7 @@ def cfg():
     embed_size = 256
     hidden_size = 512
     num_layers = 1
-    num_epochs = 40
+    num_epochs = 50
     batch_size = 128
     num_workers = 0
     learning_rate = 1e-3
@@ -226,11 +226,11 @@ def main(device, crop_size, vocab_path, train_dir, val_dir, caption_path, val_ca
                             num_workers=num_workers)
 
     # Build the models
-    # encoder = EncoderCNN(embed_size).to(device)
-    # decoder = DecoderRNN(embed_size, hidden_size, len(vocab), num_layers).to(device)
+    encoder = EncoderCNN(embed_size).to(device)
+    decoder = DecoderRNN(embed_size, hidden_size, len(vocab), num_layers).to(device)
 
     
-    start_epoch, encoder, decoder, validation_loss, epochs_since_last_improvement = load_checkpoint("experiments/3/best_model_29.pth.tar", embed_size, hidden_size, vocab, num_layers, learning_rate)
+    # start_epoch, encoder, decoder, validation_loss, epochs_since_last_improvement = load_checkpoint("experiments/3/best_model_29.pth.tar", embed_size, hidden_size, vocab, num_layers, learning_rate)
 
     encoder = encoder.to(device)
     decoder = decoder.to(device)
@@ -257,7 +257,7 @@ def main(device, crop_size, vocab_path, train_dir, val_dir, caption_path, val_ca
 
         train_loss = train(device=device, data_loader=data_loader, encoder=encoder, decoder=decoder, criterion=criterion, optimizer=optimizer, epoch=epoch, 
         total_step=total_step, num_epochs=num_epochs,log_step=log_step, writer=writer, scorer=scorer, vocab=vocab)
-
+ 
         validation_loss, bleu_accuracy = validate(device=device, val_loader=val_loader, encoder=encoder, decoder=decoder, criterion=criterion, epoch=epoch, total_step=total_step, 
         num_epochs=num_epochs, log_step=log_step, writer=writer, vocab=vocab, scorer=scorer)
 
@@ -277,6 +277,9 @@ def main(device, crop_size, vocab_path, train_dir, val_dir, caption_path, val_ca
         if validation_loss < best_validation_loss:
             best_validation_loss = validation_loss
             epochs_since_last_improvement = 0
+            save_checkpoint(epoch, encoder, decoder, optimizer, validation_loss, epochs_since_last_improvement, log_dir)
+        
+        if epoch == 29:
             save_checkpoint(epoch, encoder, decoder, optimizer, validation_loss, epochs_since_last_improvement, log_dir)
         
         if epoch == (num_epochs-1):
