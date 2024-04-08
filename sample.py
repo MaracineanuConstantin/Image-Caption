@@ -36,7 +36,6 @@ def main():
     batch_size = 128
     learning_rate = 0.001
     image_path = 'png/biciclisti.png'
-    vocab_path = 'data/vocab.pkl'
 
     # Image preprocessing
     transform = transforms.Compose([
