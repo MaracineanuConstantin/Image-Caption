@@ -1,14 +1,19 @@
 import torch
 from model import EncoderCNN, DecoderRNN
 from utils import load_checkpoint
-from nltk.translate.bleu_score import corpus_bleu
+from nltk.translate.bleu_score import corpus_bleu, sentence_bleu, SmoothingFunction
 import pickle
 from build_vocab import Vocabulary
 from tqdm import tqdm
 from torchvision import transforms
 from data_loader import validation_loader
+import matplotlib.pyplot as plt
+from torchvision.transforms.functional import to_pil_image
+from nlgmetricverse import NLGMetricverse, load_metric, DataLoaderStrategies
 
-def evaluate(encoder, decoder, val_dir, val_caption_path, vocab, batch_size, num_workers, device):
+# de rezolvat pentru mai multe imagini
+
+def eval(encoder, decoder, val_dir, val_caption_path, vocab, batch_size, num_workers, device):
     transform = transforms.Compose([
     transforms.ToTensor(), 
     transforms.Normalize((0.485, 0.456, 0.406), 
@@ -63,8 +68,27 @@ def evaluate(encoder, decoder, val_dir, val_caption_path, vocab, batch_size, num
         ref_sentence = ' '.join(reference_caption)
         references.append(ref_sentence)
 
-    bleu4 = corpus_bleu(references, hypotheses)
-    print (f'Rezultatul bleu este: {bleu4}')
+        # to_pil_image(images.squeeze(0)).show()
+    
+    print(ref_sentence)
+    print(sentence)
+
+    # chencherry = SmoothingFunction()
+
+    # bleu4 = corpus_bleu(references, hypotheses, smoothing_function=chencherry.method4)
+    # print (f'Rezultatul bleu4 este: {bleu4}')
+
+    metrics = [
+    load_metric("bleu"),
+    load_metric("rouge"),
+    load_metric("meteor"),
+    load_metric("cider")
+    ]
+
+    scorer = NLGMetricverse(metrics=metrics)
+    scores = scorer(predictions=hypotheses, references=references)
+
+    print(f"scores are: {scores}")
 
 def main():
     # config params
@@ -75,21 +99,21 @@ def main():
     embed_size = 256
     hidden_size = 512
     num_layers = 1
-    batch_size = 1
+    batch_size = 128
     num_workers = 0
     learning_rate = 0.001
-    # teoretic nu ar trebui sa am nevoie de parametrii
+    
 
     # Load vocabulary wrapper
     with open(vocab_path, 'rb') as f:
         vocab = pickle.load(f)
 
-    start_epoch, encoder, decoder, validation_loss, epochs_since_last_improvement = load_checkpoint("experiments/38/best_model.pth.tar", embed_size, hidden_size, vocab, num_layers, learning_rate)
+    start_epoch, encoder, decoder, validation_loss, epochs_since_last_improvement = load_checkpoint("experiments/51/best_model.pth.tar", embed_size, hidden_size, vocab, num_layers, learning_rate)
 
     encoder.to(device)
     decoder.to(device)
 
-    evaluate(encoder, decoder, val_dir, val_caption_path, vocab, batch_size, num_workers, device)
+    eval(encoder, decoder, val_dir, val_caption_path, vocab, batch_size, num_workers, device)
 
 
 if __name__ == '__main__':
