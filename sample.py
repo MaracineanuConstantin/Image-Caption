@@ -24,7 +24,7 @@ def load_image(image_path, transform=None):
     
     return image
 
-def main(args):
+def main():
         # config params
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     vocab_path = 'data/vocab.pkl'
@@ -34,9 +34,9 @@ def main(args):
     hidden_size = 512
     num_layers = 1
     batch_size = 128
-    num_workers = 0
     learning_rate = 0.001
     image_path = 'png/biciclisti.png'
+    vocab_path = 'data/vocab.pkl'
 
     # Image preprocessing
     transform = transforms.Compose([
@@ -45,11 +45,11 @@ def main(args):
                              (0.229, 0.224, 0.225))])
     
     # Load vocabulary wrapper
-    with open(args.vocab_path, 'rb') as f:
+    with open(vocab_path, 'rb') as f:
         vocab = pickle.load(f)
 
     # Build models
-    start_epoch, encoder, decoder, validation_loss, epochs_since_last_improvement = load_checkpoint("experiments/3/best_model_14.ckpt", embed_size, hidden_size, vocab, num_layers, learning_rate)
+    start_epoch, encoder, decoder, validation_loss, epochs_since_last_improvement = load_checkpoint("experiments/9/best_model_9.pth", embed_size, hidden_size, vocab, num_layers, learning_rate)
 
     encoder.to(device)
     decoder.to(device)
@@ -78,20 +78,8 @@ def main(args):
     
     # Print out the image and the generated caption
     print (sentence)
-    image = Image.open(args.image)
+    image = Image.open(image_path)
     plt.imshow(np.asarray(image))
     
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--image', type=str,default="png/biciclisti.png", help='input image for generating caption')
-    # parser.add_argument('--image', type=str,default="data/val2014/COCO_val2014_000000000143.jpg", help='input image for generating caption')
-    # parser.add_argument('--encoder_path', type=str, default='models/encoder-12-205.ckpt', help='path for trained encoder')
-    # parser.add_argument('--decoder_path', type=str, default='models/decoder-12-205.ckpt', help='path for trained decoder')
-    parser.add_argument('--vocab_path', type=str, default='data/vocab.pkl', help='path for vocabulary wrapper')
-    
-    # Model parameters (should be same as paramters in train.py)
-    parser.add_argument('--embed_size', type=int , default=256, help='dimension of word embedding vectors')
-    parser.add_argument('--hidden_size', type=int , default=512, help='dimension of lstm hidden states')
-    parser.add_argument('--num_layers', type=int , default=1, help='number of layers in lstm')
-    args = parser.parse_args()
-    main(args)
+    main()
