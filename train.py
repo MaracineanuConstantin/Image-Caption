@@ -71,11 +71,15 @@ def train(device, data_loader, encoder, decoder, criterion, optimizer, epoch, to
             # captions au padding, lengths au marimile originale (inainte sa fie umplut cu 0 pana la max length)
             # targets = valorile puse 
             # Forward, backward and optimize
+            optimizer.zero_grad()
+            decoder.zero_grad()
+            encoder.zero_grad()
+
             features = encoder(images)
             outputs = decoder(features, captions, lengths)
             loss = criterion(outputs, targets)
-            decoder.zero_grad()
-            encoder.zero_grad()
+            
+            
             loss.backward()
             optimizer.step()
 
@@ -90,7 +94,6 @@ def train(device, data_loader, encoder, decoder, criterion, optimizer, epoch, to
             batch_time.update(time.time() - start)
 
             start = time.time()
-
             # Get training statistics.
             stats = f'Training epoch [{epoch}/{num_epochs}], Step [{i}/{total_step}], Batch time {batch_time.avg:.3f}, Data time {data_time.avg:.3f}, Loss {loss.item():.3f}, Perplexity {np.exp(loss.item()):.3f}'
             # Print training statistics .
