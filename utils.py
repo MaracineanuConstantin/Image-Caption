@@ -4,6 +4,8 @@ import torch
 import os
 from model import EncoderCNN, DecoderRNN
 
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
 def seed_everything(seed: int):
     random.seed(seed)
     os.environ['PYTHONHASHSEED'] = str(seed)
@@ -30,7 +32,7 @@ def save_checkpoint(epoch, encoder, decoder, optimizer, loss, epochs_since_last_
              'loss': loss,
              'epochs_since_last_improvement': epochs_since_last_improvement}
     
-    filename = f'best_model_{epoch}.pth'
+    filename = f'best_model_{epoch}.pt'
     save_file = os.path.join(save_path, filename)
     torch.save(state, save_file)
 
@@ -39,10 +41,12 @@ def load_checkpoint(checkpoint, embed_size, hidden_size, vocab, num_layers, lear
     epoch = checkpoint['epoch']
     print('\nLoaded checkpoint from epoch %d.\n' % epoch)
     encoder = EncoderCNN(embed_size)
+    # encoder.to(device)
     encoder.load_state_dict(checkpoint['encoder'])
     
     decoder = DecoderRNN(embed_size, hidden_size, len(vocab), num_layers)
-    decoder.load_state_dict = checkpoint['decoder']
+    # decoder.to(device)
+    decoder.load_state_dict(checkpoint['decoder'])
 
     validation_loss = checkpoint['loss']
     epochs_since_last_improvement = checkpoint['epochs_since_last_improvement']
