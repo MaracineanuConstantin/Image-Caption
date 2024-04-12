@@ -9,7 +9,7 @@ from torchvision import transforms
 from build_vocab import Vocabulary
 from model import EncoderCNN, DecoderRNN
 from PIL import Image
-
+from utils import load_checkpoint
 import time
 
 # camera
@@ -43,27 +43,30 @@ def main():
     # Load vocabulary wrapper
     with open(vocab_path, 'rb') as f:
         vocab = pickle.load(f)
-
+    
     encoder_path = "models/encoder-12-205.ckpt"
     decoder_path = "models/decoder-12-205.ckpt"
     embed_size = 256
     hidden_size = 512
     num_layers = 1
+    learning_rate = 0.001
+    start_epoch, encoder, decoder, validation_loss, epochs_since_last_improvement = load_checkpoint("experiments/10/best_model_9.pt", embed_size, hidden_size, vocab, num_layers, learning_rate)
+
+
     # Build models
-    encoder = EncoderCNN(embed_size).eval()  # eval mode (batchnorm uses moving mean/variance)
-    decoder = DecoderRNN(embed_size, hidden_size, len(vocab), num_layers)
     encoder = encoder.to(device)
     decoder = decoder.to(device)
-
+    encoder.eval()
+    decoder.eval()
     # Load the trained model parameters
-    encoder.load_state_dict(torch.load(encoder_path))
-    decoder.load_state_dict(torch.load(decoder_path))
+    # encoder.load_state_dict(torch.load(encoder_path))
+    # decoder.load_state_dict(torch.load(decoder_path))
 
     ## TODO: remove saving frame to file
     while True:
         # ret, depth_frame, color_frame = dc.get_frame()
         ret, color_frame = vid.read()
-        # time.sleep(2)
+        time.sleep(1)
         # Save color frame as an image file
         image_path = 'temp_image.jpg'
         cv2.imwrite(image_path, color_frame)
