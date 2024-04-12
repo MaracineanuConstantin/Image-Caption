@@ -41,7 +41,7 @@ def cfg():
     embed_size = 256
     hidden_size = 512
     num_layers = 1
-    num_epochs = 50
+    num_epochs = 30
     batch_size = 128
     num_workers = 0
     learning_rate = 1e-3
@@ -78,7 +78,6 @@ def train(device, data_loader, encoder, decoder, criterion, optimizer, epoch, to
             features = encoder(images)
             outputs = decoder(features, captions, lengths)
             loss = criterion(outputs, targets)
-            
             
             loss.backward()
             optimizer.step()

@@ -8,7 +8,7 @@ import nltk
 from PIL import Image
 from build_vocab import Vocabulary
 from pycocotools.coco import COCO
-
+import string
 
 class CocoDataset(data.Dataset):
     """COCO Custom Dataset compatible with torch.utils.data.DataLoader."""
@@ -23,11 +23,13 @@ class CocoDataset(data.Dataset):
         """
         self.root = root
         self.coco = COCO(json)
-        self.ids = list(self.coco.anns.keys())
+        # self.ids = list(self.coco.anns.keys())
         # If needed to shorten the amount of images - change the number from [] in the line below and it will take the first x images
-        # self.ids = list(self.coco.anns.keys())[:130]
+        self.ids = list(self.coco.anns.keys())[:384]
         self.vocab = vocab
         self.transform = transform
+        # create translator to remove punctuation from caption
+        self.translator = str.maketrans("", "", string.punctuation)
 
     def __getitem__(self, index):
         """Returns one data pair (image and caption)."""
@@ -35,13 +37,21 @@ class CocoDataset(data.Dataset):
         vocab = self.vocab
         ann_id = self.ids[index]
         caption = coco.anns[ann_id]['caption']
-        img_id = coco.anns[ann_id]['image_id']
+        caption = caption.translate(self.translator)
+        img_id = coco.anns[ann_id]['image_id']      # afisat imaginea inainte si dupa ce se apeleaza getitem
         path = coco.loadImgs(img_id)[0]['file_name']
 
         image = Image.open(os.path.join(self.root, path)).convert('RGB')
+        
         if self.transform is not None:
             image = self.transform(image)
 
+        
+        '''
+        Debug purpose to show the image after transformation:
+        from torchvision.transforms.functional import to_pil_image
+        to_pil_image(image).show()
+        '''
         # Convert caption (string) to word ids.
         tokens = nltk.tokenize.word_tokenize(str(caption).lower())
         caption = []
@@ -118,3 +128,9 @@ def validation_loader(root, json, vocab, transform, batch_size, num_workers):
                                              num_workers=num_workers,
                                              collate_fn=collate_fn)
     return val_loader
+
+
+# 1 4 5 7 8 4 3 7 8 5 0 0 0 0 0 0 0 0 
+# 6 7 3 4 4 5 7 8 4 7 9 3 7 0 0 0 0 0 
+# 1 2 3 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 
+# 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 
