@@ -24,12 +24,11 @@ class CocoDataset(data.Dataset):
         self.root = root
         self.coco = COCO(json)
         # self.ids = list(self.coco.anns.keys())
-        # If needed to shorten the amount of images - change the number from [] in the line below and it will take the first x images
-        self.ids = list(self.coco.anns.keys())[:384]
+        # If needed to shorten the amount of images - change the number from [] in the line below and it will take the first x images or replace x with "len(self.coco.imgs)//2" for half dataset
+        self.ids = list(self.coco.anns.keys())[:(len(self.coco.imgs)//2)]
         self.vocab = vocab
         self.transform = transform
-        # create translator to remove punctuation from caption
-        self.translator = str.maketrans("", "", string.punctuation)
+        self.translator = str.maketrans("", "", string.punctuation) # create translator to remove punctuation from caption
 
     def __getitem__(self, index):
         """Returns one data pair (image and caption)."""
