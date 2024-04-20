@@ -31,7 +31,7 @@ ex.observers.append(FileStorageObserver(observers_directory))
 def cfg():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     crop_size = 224
-    vocab_path = 'data/vocab.pkl'
+    vocab_path = 'data/vocab2017.pkl'
     train_dir = 'data/resizedtrain2017'
     val_dir = 'data/resizedval2017'
     caption_path = 'data/annotations/captions_train2017.json'
