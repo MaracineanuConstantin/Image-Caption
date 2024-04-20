@@ -18,8 +18,7 @@ from nltk.translate.bleu_score import corpus_bleu
 from nlgmetricverse import NLGMetricverse, load_metric
 from torch.utils.tensorboard import SummaryWriter
 
-## de antrenat in functie de validation loss dar verificat/calculat de asemenea metricile
-## OPTIONAL: de salvat imaginea la fiecare etapa din ANTRENARE
+
 ## eventual salvat sub fiecare strat numarul/numele layer-ului
 
 # Create a sacred experiment
@@ -33,15 +32,15 @@ def cfg():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     crop_size = 224
     vocab_path = 'data/vocab.pkl'
-    train_dir = 'data/resized2014'
-    val_dir = 'data/resizedval2014'
-    caption_path = 'data/annotations/captions_train2014.json'
-    val_caption_path = 'data/annotations/captions_val2014.json'
+    train_dir = 'data/resizedtrain2017'
+    val_dir = 'data/resizedval2017'
+    caption_path = 'data/annotations/captions_train2017.json'
+    val_caption_path = 'data/annotations/captions_val2017.json'
     log_step = 25
     embed_size = 256
     hidden_size = 512
     num_layers = 1
-    num_epochs = 30
+    num_epochs = 15
     batch_size = 128
     num_workers = 0
     learning_rate = 1e-3
