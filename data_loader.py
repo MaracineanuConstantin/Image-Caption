@@ -22,14 +22,32 @@ class CocoDataset(data.Dataset):
             transform: image transformer.
         """
         self.root = root
-        self.coco = COCO(json)
-        # self.ids = list(self.coco.anns.keys())
+        self.coco = COCO(json)        
+        self.ids = list(self.coco.anns.keys())
         # If needed to shorten the amount of images - change the number from [] in the line below and it will take the first x images or replace x with "len(self.coco.imgs)//2" for half dataset
-        self.ids = list(self.coco.anns.keys())[:(len(self.coco.imgs)//2)]
+        # self.ids = list(self.coco.anns.keys())[:384]
+
+    # coco initializes with all annotations from the json so we need to filter based on the folder used
+        if self.root == 'data/SPLITtest':
+            valid_ids = []
+            valid_imgs = {}
+            for img_id in self.coco.anns:
+                image_id = self.coco.anns[img_id]['image_id']
+                file_name = self.coco.imgs[image_id]['file_name']
+                if os.path.exists(os.path.join(self.root, file_name)):
+                    valid_ids.append(img_id)
+                    if self.coco.anns[img_id]['image_id'] not in valid_imgs.keys():
+                        valid_imgs.update({image_id : self.coco.imgs[image_id]})
+                    
+        if self.root == 'data/SPLITtest':
+            self.ids = valid_ids
+            self.coco.imgs = valid_imgs
+
         self.vocab = vocab
         self.transform = transform
         self.translator = str.maketrans("", "", string.punctuation) # create translator to remove punctuation from caption
 
+        
     def __getitem__(self, index):
         """Returns one data pair (image and caption)."""
         coco = self.coco
@@ -41,7 +59,7 @@ class CocoDataset(data.Dataset):
         path = coco.loadImgs(img_id)[0]['file_name']
 
         image = Image.open(os.path.join(self.root, path)).convert('RGB')
-        
+
         if self.transform is not None:
             image = self.transform(image)
 
@@ -120,13 +138,13 @@ def validation_loader(root, json, vocab, transform, batch_size, num_workers):
                        json=json,
                        vocab=vocab,
                        transform=transform)
-    
     val_loader = torch.utils.data.DataLoader(dataset=coco_val,
                                              batch_size=batch_size,
                                              shuffle=False,
                                              num_workers=num_workers,
                                              collate_fn=collate_fn)
     return val_loader
+
 
 
 # 1 4 5 7 8 4 3 7 8 5 0 0 0 0 0 0 0 0 
