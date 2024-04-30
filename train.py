@@ -49,20 +49,15 @@ def cfg():
     epochs_since_last_improvement = 0
     start_epoch = 0
     seed = seed_everything(42)
-    # metrics = [
-    # load_metric("bleu"),
-    # load_metric("rouge"),
-    # load_metric("meteor"),
-    # load_metric("cider")
-    # ]
     metrics = [
+    load_metric("bleu"),
     load_metric("rouge"),
     load_metric("meteor"),
     load_metric("cider")
     ]
 
 @ex.capture
-def train(device, data_loader, encoder, decoder, criterion, optimizer, epoch, total_step, num_epochs, log_step, writer, scorer, bleu3, vocab):
+def train(device, data_loader, encoder, decoder, criterion, optimizer, epoch, total_step, num_epochs, log_step, writer, scorer, vocab):
     encoder.train()
     decoder.train()
     losses = AverageMeter()
@@ -121,21 +116,17 @@ def train(device, data_loader, encoder, decoder, criterion, optimizer, epoch, to
 
 
     scores = scorer(predictions=generated_words_strings, references=reference_words_strings)
-    bleu = bleu3(predictions=generated_words_strings, references=reference_words_strings, max_order=3)
     print(f"Train scores are: {scores}")
-    print(f"Bleu3 score is: {bleu}")
 
 
     ex.log_scalar('Train/Loss/CrossEntropy', losses.avg, epoch)
-    # ex.log_scalar('Train/Accuracy/Bleu ', scores['bleu']['score'], epoch)
-    ex.log_scalar('Train/Accuracy/Bleu ', bleu['bleu']['score'], epoch)
+    ex.log_scalar('Train/Accuracy/Bleu ', scores['bleu']['score'], epoch)
     ex.log_scalar('Train/Accuracy/Rouge1 ', scores['rouge']['rouge1'], epoch)
     ex.log_scalar('Train/Accuracy/Meteor ', scores['meteor']['score'], epoch)
     ex.log_scalar('Train/Accuracy/Cider ', scores['cider']['score'], epoch)
 
     writer.add_scalar('Train/Loss/CrossEntropy', losses.avg, epoch)
-    # writer.add_scalar('Train/Accuracy/Bleu ', scores['bleu']['score'], epoch)
-    writer.add_scalar('Train/Accuracy/Bleu ', bleu['bleu']['score'], epoch)
+    writer.add_scalar('Train/Accuracy/Bleu ', scores['bleu']['score'], epoch)
     writer.add_scalar('Train/Accuracy/Rouge1 ', scores['rouge']['rouge1'], epoch)
     writer.add_scalar('Train/Accuracy/Meteor ', scores['meteor']['score'], epoch)
     writer.add_scalar('Train/Accuracy/Cider ', scores['cider']['score'], epoch)
@@ -144,7 +135,7 @@ def train(device, data_loader, encoder, decoder, criterion, optimizer, epoch, to
 
 
 @ex.capture
-def validate(device, val_loader, encoder, decoder, criterion, epoch, total_step, num_epochs, log_step, writer, vocab, scorer, bleu3):
+def validate(device, val_loader, encoder, decoder, criterion, epoch, total_step, num_epochs, log_step, writer, vocab, scorer):
     encoder.eval()
     decoder.eval()
     batch_time = AverageMeter()
@@ -189,23 +180,17 @@ def validate(device, val_loader, encoder, decoder, criterion, epoch, total_step,
 
 
     scores = scorer(predictions=generated_words_strings, references=reference_words_strings)
-    bleu = bleu3(predictions=generated_words_strings, references=reference_words_strings, max_order=3)
     print(f"Validation scores are: {scores}")
-    print(f"Bleu score: {bleu}")
 
-    # bleu_accuracy = scores['bleu']['score']
-    bleu_accuracy = bleu['bleu']['score']
-
+    bleu_accuracy = scores['bleu']['score']
     ex.log_scalar('Validation/Loss/CrossEntropy', losses.avg, epoch)
-    # ex.log_scalar('Validation/Accuracy/Bleu ', scores['bleu']['score'], epoch)
-    ex.log_scalar('Validation/Accuracy/Bleu ', bleu['bleu']['score'], epoch)
+    ex.log_scalar('Validation/Accuracy/Bleu ', scores['bleu']['score'], epoch)
     ex.log_scalar('Validation/Accuracy/Rouge1 ', scores['rouge']['rouge1'], epoch)
     ex.log_scalar('Validation/Accuracy/Meteor ', scores['meteor']['score'], epoch)
     ex.log_scalar('Validation/Accuracy/Cider ', scores['cider']['score'], epoch)
 
     writer.add_scalar('Validation/Loss/CrossEntropy', losses.avg, epoch)
-    # writer.add_scalar('Validation/Accuracy/Bleu ', scores['bleu']['score'], epoch)
-    writer.add_scalar('Validation/Accuracy/Bleu ', bleu['bleu']['score'], epoch)
+    writer.add_scalar('Validation/Accuracy/Bleu ', scores['bleu']['score'], epoch)
     writer.add_scalar('Validation/Accuracy/Rouge1 ', scores['rouge']['rouge1'], epoch)
     writer.add_scalar('Validation/Accuracy/Meteor ', scores['meteor']['score'], epoch)
     writer.add_scalar('Validation/Accuracy/Cider ', scores['cider']['score'], epoch)
@@ -263,7 +248,6 @@ def main(device, crop_size, vocab_path, train_dir, val_dir, caption_path, val_ca
 
 
     scorer = NLGMetricverse(metrics=metrics)
-    bleu3 = NLGMetricverse(load_metric("bleu"))
 
     # Train the models
     total_step = len(data_loader)
@@ -271,10 +255,10 @@ def main(device, crop_size, vocab_path, train_dir, val_dir, caption_path, val_ca
         start = time.time()
 
         train_loss = train(device=device, data_loader=data_loader, encoder=encoder, decoder=decoder, criterion=criterion, optimizer=optimizer, epoch=epoch, 
-        total_step=total_step, num_epochs=num_epochs,log_step=log_step, writer=writer, scorer=scorer, bleu3=bleu3, vocab=vocab)
+        total_step=total_step, num_epochs=num_epochs,log_step=log_step, writer=writer, scorer=scorer, vocab=vocab)
  
         validation_loss, bleu_accuracy = validate(device=device, val_loader=val_loader, encoder=encoder, decoder=decoder, criterion=criterion, epoch=epoch, total_step=total_step, 
-        num_epochs=num_epochs, log_step=log_step, writer=writer, vocab=vocab, scorer=scorer, bleu3=bleu3)
+        num_epochs=num_epochs, log_step=log_step, writer=writer, vocab=vocab, scorer=scorer)
 
         if best_bleu_accuracy is None:
             best_bleu_accuracy = bleu_accuracy
