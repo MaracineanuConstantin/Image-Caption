@@ -31,11 +31,11 @@ ex.observers.append(FileStorageObserver(observers_directory))
 def cfg():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     crop_size = 160
-    vocab_path = 'data/vocab2017.pkl'
-    train_dir = 'data/resized192train2017'
-    val_dir = 'data/resized192val2017'
-    caption_path = 'data/annotations/captions_train2017.json'
-    val_caption_path = 'data/annotations/captions_val2017.json'
+    vocab_path = 'data/vocab.pkl'
+    train_dir = 'data/resized2014'
+    val_dir = 'data/SPLITval'
+    caption_path = 'data/annotations/captions_train2014.json'
+    val_caption_path = 'data/annotations/captions_val2014.json'
     log_step = 25
     embed_size = 256
     hidden_size = 512
