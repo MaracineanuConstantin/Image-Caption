@@ -43,6 +43,16 @@ class CocoDataset(data.Dataset):
             self.ids = valid_ids
             self.coco.imgs = valid_imgs
 
+
+        if self.root == 'data/SPLITval':
+            valid_ids = []
+            for img_id in self.coco.anns:
+                image_id = self.coco.anns[img_id]['image_id']
+                file_name = self.coco.imgs[image_id]['file_name']
+                if os.path.exists(os.path.join(self.root, file_name)):
+                    valid_ids.append(img_id)
+            self.ids = valid_ids
+
         self.vocab = vocab
         self.transform = transform
         self.translator = str.maketrans("", "", string.punctuation) # create translator to remove punctuation from caption
