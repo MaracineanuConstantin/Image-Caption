@@ -35,8 +35,9 @@ class CocoDataset(data.Dataset):
                 image_id = self.coco.anns[img_id]['image_id']
                 file_name = self.coco.imgs[image_id]['file_name']
                 if os.path.exists(os.path.join(self.root, file_name)):
-                    valid_ids.append(img_id)
+                    # valid_ids.append(img_id)
                     if self.coco.anns[img_id]['image_id'] not in valid_imgs.keys():
+                        valid_ids.append(img_id)
                         valid_imgs.update({image_id : self.coco.imgs[image_id]})
                     
         if self.root == 'data/SPLITtest':
