@@ -39,13 +39,11 @@ def save_checkpoint(epoch, encoder, decoder, optimizer, loss, epochs_since_last_
 def load_checkpoint(checkpoint, embed_size, hidden_size, vocab, num_layers, learning_rate):
     checkpoint = torch.load(checkpoint)
     epoch = checkpoint['epoch']
-    print('\nLoaded checkpoint from epoch %d.\n' % epoch)
+    # print(f'Loaded checkpoint from epoch {epoch}.')
     encoder = EncoderCNN(embed_size)
-    # encoder.to(device)
     encoder.load_state_dict(checkpoint['encoder'])
     
     decoder = DecoderRNN(embed_size, hidden_size, len(vocab), num_layers)
-    # decoder.to(device)
     decoder.load_state_dict(checkpoint['decoder'])
 
     validation_loss = checkpoint['loss']
