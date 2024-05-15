@@ -6,7 +6,7 @@ from PyQt5.QtGui import QPixmap, QFont, QFontDatabase
 import cv2
 import torch
 import time
-
+import csv
 # Get the current script's directory
 current_dir = os.path.dirname(os.path.abspath(__file__))
 # Get the parent directory by going one level up
@@ -21,11 +21,14 @@ import pickle
 from torchvision import transforms
 from build_vocab import Vocabulary
 from PIL import Image
+import pyttsx3
+from threading import Thread as Thread
+
 
 class ImageCaptionGenerator:
     def __init__(self):
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        self.vocab_path = 'data/vocab.pkl'
+        self.vocab_path = 'data/vocab2017.pkl'
         self.embed_size = 256
         self.hidden_size = 512
         self.num_layers = 1 
@@ -113,13 +116,15 @@ class ImageCaptionGenerator:
 
 class ConsoleRedirector(QtCore.QObject):
     text_written = QtCore.pyqtSignal(str)
-
     def write(self, text):
         self.text_written.emit(str(text))
+
+
 
 class ImageLoaderWindow(QMainWindow):
     def __init__(self):
         super().__init__()
+        self.text = ''
         self.setWindowTitle("MainWindow")
         self.setGeometry(400, 200, 1000, 800)
         self.setContentsMargins(20, 20, 20, 20)
@@ -131,29 +136,33 @@ class ImageLoaderWindow(QMainWindow):
         self.loadModelButton = QPushButton("Load Model",self.central_widget)
         self.loadModelButton.setGeometry(QtCore.QRect(20, 50, 170, 80))
         self.loadModelButton.setFont(QFont('Times', 12))
-        self.loadModelButton.clicked.connect(self.load_model)
+        # self.loadModelButton.clicked.connect(self.load_model)
+        self.loadModelButton.clicked.connect(self.thread1)
 
         self.loadImageButton = QPushButton("Load Image", self.central_widget)
         self.loadImageButton.setGeometry(QtCore.QRect(20, 170, 170, 80))
         self.loadImageButton.setFont(QFont('Times', 12))
-        self.loadImageButton.clicked.connect(self.load_image)
-        
+        # self.loadImageButton.clicked.connect(self.load_image)
+        self.loadImageButton.clicked.connect(self.thread2)
+
         self.livestreamButton = QPushButton("Livestream", self.central_widget)
         self.livestreamButton.setGeometry(QtCore.QRect(20, 290, 170, 80))
         self.livestreamButton.setFont(QFont('Times', 12))
-        self.livestreamButton.clicked.connect(self.start_livestream)
+        # self.livestreamButton.clicked.connect(self.start_livestream)
+        self.livestreamButton.clicked.connect(self.thread3)
 
         # Label to display loaded image
         self.image_label = QLabel(self.central_widget)
         self.image_label.setGeometry(220, 50, 700, 450)
 
+        self.engine = pyttsx3.init()
 
         # Output console
         self.output_console = QTextEdit(self.central_widget)
         self.output_console.setGeometry(0, 500, 1000, 300)
         self.output_console.setFont(QFont('Times', 10))
         self.output_console.setStyleSheet("padding: 15px")
-
+        
         
         self.output_console.setReadOnly(True)
 
@@ -161,25 +170,32 @@ class ImageLoaderWindow(QMainWindow):
         # Redirect console output to QTextEdit
         self.console_redirector = ConsoleRedirector()
         sys.stdout = self.console_redirector
-        self.console_redirector.text_written.connect(self.onUpdateText) 
-
+        self.console_redirector.text_written.connect(self.onUpdateText)
+        # self.console_redirector.text_written.connect(self.thread4)
         # Variable to hold the loaded image
         self.loaded_image = None
-
         self.image_caption_generate = ImageCaptionGenerator()
-
 
         
     def load_image(self):
         options = QFileDialog.Options()
-        filename, _ = QFileDialog.getOpenFileName(self, "Load Image", "png/", "Image Files (*.png *.jpg *.jpeg *.bmp *.gif)",
+        filename, _ = QFileDialog.getOpenFileName(self, "Load Image", "data/SPLITtest", "Image Files (*.png *.jpg *.jpeg *.bmp *.gif)",
                                                   options=options)
         if filename:
             pixmap = QPixmap(filename)
-            self.loaded_image = filename
+            self.loaded_image = os.path.basename(filename)
             self.display_image(pixmap)
+            
+            with open('problema_images.csv', mode='r', newline='') as file:
+                reader_object = csv.reader(file)
+                for row in reader_object:
+                    if(self.loaded_image == row[0]):
+                        print(f'Reference caption: {row[4]}')
+                        self.speak(f'Reference caption: {row[4]}')
+                        
+            
             if self.image_caption_generate.model:
-                self.generate_caption(self.loaded_image)
+                self.generate_caption(filename)
         
 
     def load_model(self):
@@ -188,6 +204,8 @@ class ImageLoaderWindow(QMainWindow):
         if filename:
             self.image_caption_generate.model = filename
             self.image_caption_generate.initialize_model(filename)
+            self.speak(f'Loaded checkpoint: model-{filename} epoch-{self.image_caption_generate.start_epoch}')
+
 
 
     def display_image(self, pixmap):
@@ -195,29 +213,38 @@ class ImageLoaderWindow(QMainWindow):
         self.image_label.setPixmap(pixmap)
 
 
+
     def onUpdateText(self, text):
+        self.text = text
         self.output_console.moveCursor(QtGui.QTextCursor.End)
         self.output_console.insertPlainText(text)
+        
+        
+        # self.speak(self.text)
 
+
+    def speak(self, text):
+        self.engine.say(text)
+        self.engine.runAndWait()
 
     def generate_caption(self, image_path):
         caption = self.image_caption_generate.generate_caption(image_path)
-        print(caption)
+        print(f'Generated caption: {caption}')
+        self.speak(f'Generated caption: {caption}')
 
 
     def start_livestream(self):
         vid = cv2.VideoCapture(0)
 
         while(True):
-            time.sleep(1)
             ret, frame = vid.read()
             cv2.imshow('frame', frame)
             
             caption = self.image_caption_generate.generate_frame_caption(frame)
 
             print(caption)
+            self.speak(caption)
 
-            
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
         
@@ -225,6 +252,21 @@ class ImageLoaderWindow(QMainWindow):
 
         cv2.destroyAllWindows()
 
+
+
+    def thread1(self):
+        t1 = Thread(target = self.load_model)
+        t1.start()
+    
+    def thread2(self):
+        t2 = Thread(target = self.load_image)
+        t2.start()
+    
+    def thread3(self):
+        t3 = Thread(target = self.start_livestream)
+        t3.start()
+
+    
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
