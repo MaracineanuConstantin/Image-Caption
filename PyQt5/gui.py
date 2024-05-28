@@ -221,7 +221,7 @@ class ImageLoaderWindow(QMainWindow):
 
     def load_image(self):
         options = QFileDialog.Options()
-        filename, _ = QFileDialog.getOpenFileName(self, "Load Image", "data/SPLITtest", "Image Files (*.png *.jpg *.jpeg *.bmp *.gif *.mp4)",
+        filename, _ = QFileDialog.getOpenFileName(self, "Load Image", "experiments/SCSS", "Image Files (*.png *.jpg *.jpeg *.bmp *.gif *.mp4)",
                                                   options=options)
 
         if filename:
@@ -242,7 +242,7 @@ class ImageLoaderWindow(QMainWindow):
 
     def load_model(self):
         options = QFileDialog.Options()
-        filename, _ = QFileDialog.getOpenFileName(self, "Load model", "experiments/", "Model Files (*.pt *ckpt *pth *pth.tar)", options=options)
+        filename, _ = QFileDialog.getOpenFileName(self, "Load model", "experiments/SCSS", "Model Files (*.pt *ckpt *pth *pth.tar)", options=options)
         if filename:
             self.image_caption_generate.model = filename
             self.image_caption_generate.initialize_model(filename)
@@ -317,7 +317,7 @@ class ImageLoaderWindow(QMainWindow):
             return
 
         options = QFileDialog.Options()
-        filename, _ = QFileDialog.getOpenFileName(self, "Load video", "data/", "Model Files (*.mp4 *.avi *.mov *.wmw *.avchd *.webm *.flv)", options=options)
+        filename, _ = QFileDialog.getOpenFileName(self, "Load video", "experiments/SCSS", "Model Files (*.mp4 *.avi *.mov *.wmw *.avchd *.webm *.flv)", options=options)
 
 
         if filename:
