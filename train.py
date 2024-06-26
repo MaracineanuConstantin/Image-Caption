@@ -31,11 +31,11 @@ ex.observers.append(FileStorageObserver(observers_directory))
 def cfg():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     crop_size = 160
-    vocab_path = 'data/vocab.pkl'
-    train_dir = 'data/resized2014'
-    val_dir = 'data/SPLITval'
-    caption_path = 'data/annotations/captions_train2014.json'
-    val_caption_path = 'data/annotations/captions_val2014.json'
+    vocab_path = 'data/vocab2017.pkl'
+    train_dir = 'data/resizedtrain2017'
+    val_dir = 'data/resizedval2017'
+    caption_path = 'data/annotations/captions_train2017.json'
+    val_caption_path = 'data/annotations/captions_val2017.json'
     log_step = 25
     embed_size = 256
     hidden_size = 512
@@ -67,6 +67,7 @@ def train(device, data_loader, encoder, decoder, criterion, optimizer, epoch, to
     reference_caption = []
     generated_caption = []
 
+    
     start = time.time()
     for i, (images, captions, lengths) in enumerate(data_loader):
             data_time.update(time.time() - start)
@@ -162,7 +163,7 @@ def validate(device, val_loader, encoder, decoder, criterion, epoch, total_step,
             generated_caption.extend(output_sample.cpu().numpy().tolist())
             reference_caption.extend(captions.cpu().numpy().tolist())
             
-            # = crossentropyloss: -(SUM(ground truth - log(targets)) 
+           
             losses.update(loss.item(), images.size(0))
 
             stats = f'Validation epoch [{epoch}/{num_epochs}], Step [{i}/{len(val_loader)}], Batch time {batch_time.avg:.3f}, Loss {loss.item():.3f}'
@@ -178,11 +179,11 @@ def validate(device, val_loader, encoder, decoder, criterion, epoch, total_step,
     generated_words_strings = [' '.join(sentence) for sentence in generated_words]
     reference_words_strings = [' '.join(sentence) for sentence in reference_words]
 
-
     scores = scorer(predictions=generated_words_strings, references=reference_words_strings)
     print(f"Validation scores are: {scores}")
 
-    bleu_accuracy = scores['bleu']['score']
+    # bleu_accuracy = scores['bleu']['score']
+    bleu_accuracy = scores['rouge']['rouge1']
     ex.log_scalar('Validation/Loss/CrossEntropy', losses.avg, epoch)
     ex.log_scalar('Validation/Accuracy/Bleu ', scores['bleu']['score'], epoch)
     ex.log_scalar('Validation/Accuracy/Rouge1 ', scores['rouge']['rouge1'], epoch)
@@ -211,6 +212,10 @@ def main(device, crop_size, vocab_path, train_dir, val_dir, caption_path, val_ca
 
     writer = SummaryWriter(log_dir=log_dir)
 
+    # Load vocabulary wrapper
+    with open(vocab_path, 'rb') as f:
+        vocab = pickle.load(f)
+
     # Image preprocessing, normalization for the pretrained resnet
     transform = transforms.Compose([ 
         transforms.RandomCrop(crop_size),
@@ -219,18 +224,15 @@ def main(device, crop_size, vocab_path, train_dir, val_dir, caption_path, val_ca
         transforms.Normalize((0.485, 0.456, 0.406), 
                              (0.229, 0.224, 0.225))])
     
-    # Load vocabulary wrapper
-    with open(vocab_path, 'rb') as f:
-        vocab = pickle.load(f)
     
 
-    # Build data loader
+    # Build data loaders
     data_loader = get_loader(train_dir, caption_path, vocab, 
                              transform, batch_size,
                              shuffle=True, num_workers=num_workers)
 
-    val_loader = validation_loader(val_dir, val_caption_path, vocab, transform, batch_size,
-                            num_workers=num_workers)
+    val_loader = get_loader(val_dir, val_caption_path, vocab, transform, batch_size,
+                            shuffle=False, num_workers=num_workers)
 
     # Build the models
     encoder = EncoderCNN(embed_size).to(device)
@@ -242,7 +244,7 @@ def main(device, crop_size, vocab_path, train_dir, val_dir, caption_path, val_ca
     decoder = decoder.to(device)
 
     # Loss and optimizer
-    criterion = nn.CrossEntropyLoss()
+    criterion = nn.CrossEntropyLoss()    # = crossentropyloss: -(SUM(ground truth * log(targets)) 
     params = list(decoder.parameters()) + list(encoder.linear.parameters()) + list(encoder.bn.parameters())
     optimizer = torch.optim.Adam(params, lr=learning_rate)
 

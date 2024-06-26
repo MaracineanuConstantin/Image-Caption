@@ -338,7 +338,7 @@ class ImageLoaderWindow(QMainWindow):
                     caption = self.image_caption_generate.generate_frame_caption(frame)
 
                     print(caption)
-                time.sleep(0.5)
+                # time.sleep(0.5)
 
                 if cv2.waitKey(1) & 0xFF == ord('q'):
                     break

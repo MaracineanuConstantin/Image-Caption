@@ -3,15 +3,14 @@ import torch.nn as nn
 import torchvision.models as models
 from torch.nn.utils.rnn import pack_padded_sequence
 from torchvision import transforms
-import matplotlib.pyplot as plt
-from torchvision.transforms.functional import to_pil_image
+# import matplotlib.pyplot as plt
+# from torchvision.transforms.functional import to_pil_image
 
 class EncoderCNN(nn.Module):
     def __init__(self, embed_size):
         """Load the pretrained ResNet-152 and replace top fc layer."""
         super(EncoderCNN, self).__init__()
         resnet = models.resnet152(weights=True)
-        # resnet = models.resnet152(weights=ResNet152_Weights.DEFAULT)
         modules = list(resnet.children())[:-1]      # delete the last fc layer.
         self.resnet = nn.Sequential(*modules)
         self.linear = nn.Linear(resnet.fc.in_features, embed_size)      # self.linear = Linear(in_features=2048, out_features=256, bias=True)
